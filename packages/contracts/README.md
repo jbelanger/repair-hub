@@ -41,48 +41,53 @@ This repository contains smart contracts for managing **repair requests** and **
    ```bash
    git clone https://github.com/your-repo-name.git
    cd your-repo-name
-
+    ```
 2. Install dependencies:
 
     ```bash
     npm install
-
+    ```
 3. Set up a .env file for deployment (optional for testnets):
 
     ```env
     INFURA_PROJECT_ID=your_infura_project_id
     PRIVATE_KEY=your_private_key
     Replace placeholders with your Infura/Alchemy project ID and private key.
+    ```
 
 ## Usage
 
 ### Compile the Smart Contracts
 
-    ```bash
-    npx hardhat compile
+```bash
+npx hardhat compile
+```
 
 ### Deploy to Local Network
 1. Start Hardhat’s local Ethereum node:
 
     ```bash
     npx hardhat node
+    ```
 
 2. Deploy the contracts:
 
     ```bash
-    npx hardhat run scripts/deploy.js --network localhost
-
-3. Deploy to Testnet
+    npx hardhat run scripts/deployAll.js --network localhost
+    ```
+### Deploy to Testnet
 Specify the network (e.g., Goerli) in the command:
 
-    ```bash
-    npx hardhat run scripts/deploy.js --network goerli
+```bash
+npx hardhat run scripts/deployAll.js --network goerli
+```
 
 ## Testing
 Run the full test suite using Hardhat:
 
-    ```bash
-    npx hardhat test
+```bash
+npx hardhat test
+```
 
 ### Key Tests
 RepairRequestContract:

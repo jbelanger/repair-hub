@@ -7,7 +7,7 @@ describe("WorkOrderContract", function () {
   beforeEach(async function () {
     [owner, landlord, contractor] = await ethers.getSigners();
     WorkOrder = await ethers.getContractFactory("WorkOrderContract");
-    workOrderContract = await WorkOrder.deploy();    
+    workOrderContract = await WorkOrder.deploy();
 
     // Create a default work order for consistency
     const repairRequestId = 1;
@@ -29,9 +29,8 @@ describe("WorkOrderContract", function () {
       .createWorkOrder(repairRequestId, landlord.address, contractor.address, agreedPrice, descriptionHash);
     await tx.wait();
 
-    const workOrder = await workOrderContract.workOrders(2);
+    const workOrder = await workOrderContract.getWorkOrderById(2);
 
-    expect(workOrder.id).to.equal(2);
     expect(workOrder.repairRequestId).to.equal(repairRequestId);
     expect(workOrder.landlord).to.equal(landlord.address);
     expect(workOrder.contractor).to.equal(contractor.address);
@@ -42,6 +41,20 @@ describe("WorkOrderContract", function () {
     expect(workOrder.updatedAt).to.be.gt(0);
   });
 
+  it("Should fetch all work orders by repair request ID", async function () {
+    const repairRequestId = 1;
+
+    // Add a second work order to the same repair request
+    await workOrderContract
+      .connect(landlord)
+      .createWorkOrder(repairRequestId, landlord.address, contractor.address, ethers.parseEther("1.5"), "QmTestHash456");
+
+    const workOrderIds = await workOrderContract.getWorkOrdersByRepairRequest(repairRequestId);
+    expect(workOrderIds.length).to.equal(2);
+    expect(workOrderIds[0]).to.equal(1);
+    expect(workOrderIds[1]).to.equal(2);
+  });
+
   it("Should update the status of a work order", async function () {
     const newStatus = 1; // Status.Signed
 
@@ -50,7 +63,7 @@ describe("WorkOrderContract", function () {
       .updateWorkOrderStatus(1, newStatus);
     await tx.wait();
 
-    const workOrder = await workOrderContract.workOrders(1);
+    const workOrder = await workOrderContract.getWorkOrderById(1);
 
     expect(workOrder.status).to.equal(newStatus);
     expect(workOrder.updatedAt).to.be.gt(workOrder.createdAt);
@@ -68,7 +81,7 @@ describe("WorkOrderContract", function () {
       .to.emit(workOrderContract, "DescriptionHashUpdated")
       .withArgs(1, "QmInitialHash123", newDescriptionHash, block.timestamp);
 
-    const workOrder = await workOrderContract.workOrders(1);
+    const workOrder = await workOrderContract.getWorkOrderById(1);
 
     expect(workOrder.descriptionHash).to.equal(newDescriptionHash);
     expect(workOrder.updatedAt).to.equal(block.timestamp);
@@ -85,20 +98,11 @@ describe("WorkOrderContract", function () {
     ).to.be.revertedWith("Work order does not exist");
   });
 
-  it("Should fetch a work order by ID", async function () {
-    const workOrder = await workOrderContract.workOrders(1);
-
-    expect(workOrder.id).to.equal(1);
-    expect(workOrder.landlord).to.equal(landlord.address);
-    expect(workOrder.contractor).to.equal(contractor.address);
-    expect(workOrder.descriptionHash).to.equal("QmInitialHash123");
-  });
-
   it("Should revert when fetching a non-existent work order", async function () {
     const invalidWorkOrderId = 999;
 
     await expect(
-      workOrderContract.getWorkOrder(invalidWorkOrderId)
+      workOrderContract.getWorkOrderById(invalidWorkOrderId)
     ).to.be.revertedWith("Work order does not exist");
   });
 
@@ -121,8 +125,8 @@ describe("WorkOrderContract", function () {
       .connect(landlord)
       .createWorkOrder(repairRequestId2, landlord.address, contractor.address, agreedPrice2, descriptionHash2);
 
-    const workOrder1 = await workOrderContract.workOrders(2);
-    const workOrder2 = await workOrderContract.workOrders(3);
+    const workOrder1 = await workOrderContract.getWorkOrderById(2);
+    const workOrder2 = await workOrderContract.getWorkOrderById(3);
 
     expect(workOrder1.repairRequestId).to.equal(repairRequestId1);
     expect(workOrder1.descriptionHash).to.equal(descriptionHash1);

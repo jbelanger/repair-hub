@@ -22,7 +22,7 @@ contract RepairRequestContract {
     }
 
     // Mapping of repair request ID to RepairRequest struct
-    mapping(uint256 => RepairRequest) public repairRequests;
+    mapping(uint256 => RepairRequest) repairRequests;
 
     // Events for repair request lifecycle
     event RepairRequestCreated(

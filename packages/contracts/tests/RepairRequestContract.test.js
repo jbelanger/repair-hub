@@ -7,7 +7,7 @@ describe("RepairRequestContract", function () {
   beforeEach(async function () {
     [owner, user1, user2] = await ethers.getSigners();
     RepairRequest = await ethers.getContractFactory("RepairRequestContract");
-    repairRequestContract = await RepairRequest.deploy();    
+    repairRequestContract = await RepairRequest.deploy();
 
     // Create a default repair request for consistency
     const propertyId = "property-123";
@@ -24,7 +24,7 @@ describe("RepairRequestContract", function () {
       .createRepairRequest(propertyId, descriptionHash);
     await tx.wait();
 
-    const repairRequest = await repairRequestContract.repairRequests(2); // ID starts from 2
+    const repairRequest = await repairRequestContract.getRepairRequest(2); // ID starts from 2
 
     expect(repairRequest.id).to.equal(2);
     expect(repairRequest.initiator).to.equal(user2.address);
@@ -43,7 +43,7 @@ describe("RepairRequestContract", function () {
       .updateRepairRequestStatus(1, newStatus);
     await tx.wait();
 
-    const repairRequest = await repairRequestContract.repairRequests(1);
+    const repairRequest = await repairRequestContract.getRepairRequest(1);
 
     expect(repairRequest.status).to.equal(newStatus);
     expect(repairRequest.updatedAt).to.be.gt(repairRequest.createdAt);
@@ -90,33 +90,11 @@ describe("RepairRequestContract", function () {
       .to.emit(repairRequestContract, "DescriptionHashUpdated")
       .withArgs(1, "QmInitialHash123", newDescriptionHash, block.timestamp);
 
-    const repairRequest = await repairRequestContract.repairRequests(1);
+    const repairRequest = await repairRequestContract.getRepairRequest(1);
 
-    expect(repairRequest.descriptionHash).to.equal(newDescriptionHash);
-    expect(repairRequest.updatedAt).to.be.gt(repairRequest.createdAt);
-  });
-
-  it("Should emit the DescriptionHashUpdated event", async function () {
-    const initialDescriptionHash = "QmInitialHash123";
-    const newDescriptionHash = "QmUpdatedHash456";
-    const updateTx = await repairRequestContract
-      .connect(user1)
-      .updateDescriptionHash(1, newDescriptionHash);
-    block = await ethers.provider.getBlock(updateTx.blockHash);
-
-    // Validate the event emission
-    await expect(updateTx)
-      .to.emit(repairRequestContract, "DescriptionHashUpdated")
-      .withArgs(1, initialDescriptionHash, newDescriptionHash, block.timestamp);
-
-    // Fetch the updated repair request
-    const repairRequest = await repairRequestContract.repairRequests(1);
-
-    // Validate the updated description hash and updatedAt timestamp
     expect(repairRequest.descriptionHash).to.equal(newDescriptionHash);
     expect(repairRequest.updatedAt).to.equal(block.timestamp);
   });
-  
 
   it("Should revert when updating the description hash of a non-existent repair request", async function () {
     const invalidRequestId = 999;
@@ -158,8 +136,8 @@ describe("RepairRequestContract", function () {
     // Create second repair request
     await repairRequestContract.connect(user2).createRepairRequest(propertyId2, descriptionHash2);
 
-    const request1 = await repairRequestContract.repairRequests(2);
-    const request2 = await repairRequestContract.repairRequests(3);
+    const request1 = await repairRequestContract.getRepairRequest(2);
+    const request2 = await repairRequestContract.getRepairRequest(3);
 
     expect(request1.initiator).to.equal(user2.address);
     expect(request1.propertyId).to.equal(propertyId1);

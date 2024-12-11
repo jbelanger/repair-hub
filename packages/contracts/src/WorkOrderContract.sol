@@ -10,6 +10,8 @@ contract WorkOrderContract {
         Completed,
         Cancelled
     }
+    // repairRequest repairR;
+    // mapping (uint256 => workOrders)
 
     // Struct to represent a work order
     struct WorkOrder {
@@ -24,8 +26,12 @@ contract WorkOrderContract {
         uint256 updatedAt;
     }
 
-    // Mapping of work order ID to WorkOrder struct
-    mapping(uint256 => WorkOrder) public workOrders;
+    // Mappings
+    mapping(uint256 => WorkOrder) private workOrders; // Maps work order ID to WorkOrder struct
+    mapping(uint256 => uint256[]) private repairRequestToWorkOrders; // Maps repair request ID to work order IDs
+
+    // Counter for generating unique work order IDs
+    uint256 private workOrderIdCounter;
 
     // Events for work order lifecycle
     event WorkOrderCreated(
@@ -50,9 +56,6 @@ contract WorkOrderContract {
         string newHash,
         uint256 updatedAt
     );
-
-    // Counter for generating unique work order IDs
-    uint256 private workOrderIdCounter;
 
     // Modifier to check if the work order exists
     modifier workOrderExists(uint256 _id) {
@@ -88,6 +91,9 @@ contract WorkOrderContract {
             createdAt: block.timestamp,
             updatedAt: block.timestamp
         });
+
+        // Link the work order to the repair request
+        repairRequestToWorkOrders[_repairRequestId].push(newWorkOrderId);
 
         emit WorkOrderCreated(
             newWorkOrderId,
@@ -134,16 +140,29 @@ contract WorkOrderContract {
     }
 
     /**
-     * @dev Get details of a work order
-     * @param _id ID of the work order
-     * @return WorkOrder details
+     * @dev Get a work order by ID
+     * @param _workOrderId ID of the work order
+     * @return WorkOrder struct
      */
-    function getWorkOrder(uint256 _id)
+    function getWorkOrderById(uint256 _workOrderId)
         external
         view
-        workOrderExists(_id)
         returns (WorkOrder memory)
     {
-        return workOrders[_id];
+        require(workOrders[_workOrderId].createdAt != 0, "Work order does not exist");
+        return workOrders[_workOrderId];
+    }
+
+    /**
+     * @dev Get all work order IDs associated with a repair request
+     * @param _repairRequestId ID of the repair request
+     * @return Array of work order IDs
+     */
+    function getWorkOrdersByRepairRequest(uint256 _repairRequestId)
+        external
+        view
+        returns (uint256[] memory)
+    {
+        return repairRequestToWorkOrders[_repairRequestId];
     }
 }
