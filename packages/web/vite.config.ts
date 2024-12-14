@@ -1,6 +1,7 @@
 import { vitePlugin as remix } from "@remix-run/dev";
 import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 declare module "@remix-run/node" {
   interface Future {
@@ -20,5 +21,11 @@ export default defineConfig({
       },
     }),
     tsconfigPaths(),
+    nodePolyfills({
+      include: ['buffer', 'events', 'http'],
+      globals: {
+        Buffer: true, // can also be 'build', 'dev', or false        
+      },
+    })
   ],
 });

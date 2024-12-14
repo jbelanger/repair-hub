@@ -52,5 +52,6 @@ export const config = getDefaultConfig({
   chains: [sepolia],
   transports: {
     [sepolia.id]: http()
-  }
+  },
+  ssr: true,
 })
