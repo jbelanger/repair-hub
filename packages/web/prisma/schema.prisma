@@ -1,0 +1,91 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  role      String // "TENANT", "LANDLORD", "ADMIN"
+  phone     String?
+  address   String   @unique // Ethereum address
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Properties owned by this user (if they're a landlord)
+  properties        Property[]      @relation("LandlordProperties")
+  // Properties where this user is a tenant
+  tenancies         Property[]      @relation("TenantProperties")
+  // Repair requests initiated by this user
+  initiatedRequests RepairRequest[] @relation("InitiatedRequests")
+}
+
+model Property {
+  id         String          @id @default(cuid())
+  address    String
+  // The landlord who owns this property
+  landlord   User            @relation("LandlordProperties", fields: [landlordId], references: [id])
+  landlordId String
+  // Tenants living in this property
+  tenants    User[]          @relation("TenantProperties")
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  // Repair requests for this property
+  repairs    RepairRequest[]
+}
+
+model RepairRequest {
+  id          String           @id // This will match the blockchain ID
+  // The user who initiated the request
+  initiator   User             @relation("InitiatedRequests", fields: [initiatorId], references: [id])
+  initiatorId String
+  // The property this request is for
+  property    Property         @relation(fields: [propertyId], references: [id])
+  propertyId  String
+  description String
+  urgency     String // "LOW", "MEDIUM", "HIGH"
+  status      String // Matches blockchain status
+  attachments String // IPFS hashes, comma-separated
+  hash        String // Blockchain verification hash
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  // Contracts associated with this repair request
+  contracts   RepairContract[]
+}
+
+model Contractor {
+  id             String           @id @default(cuid())
+  name           String
+  specialization String
+  phone          String
+  email          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  // Contracts assigned to this contractor
+  contracts      RepairContract[]
+}
+
+model RepairContract {
+  id             String        @id // This will match the blockchain ID
+  // The repair request this contract is for
+  request        RepairRequest @relation(fields: [requestId], references: [id])
+  requestId      String
+  // The contractor assigned to this contract
+  contractor     Contractor    @relation(fields: [contractorId], references: [id])
+  contractorId   String
+  agreedPrice    Float // Using Float instead of Decimal for SQLite
+  status         String // Matches blockchain status
+  startDate      DateTime
+  completionDate DateTime?
+  hash           String // Blockchain verification hash
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}

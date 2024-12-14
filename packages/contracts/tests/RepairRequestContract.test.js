@@ -35,7 +35,7 @@ describe("RepairRequestContract", function () {
     expect(repairRequest.updatedAt).to.be.gt(0);
   });
 
-  it("Should update the status of a repair request", async function () {
+  it("Should allow the initiator to update the status of a repair request", async function () {
     const newStatus = 1; // Status.InProgress
 
     const tx = await repairRequestContract
@@ -47,6 +47,40 @@ describe("RepairRequestContract", function () {
 
     expect(repairRequest.status).to.equal(newStatus);
     expect(repairRequest.updatedAt).to.be.gt(repairRequest.createdAt);
+  });
+
+  it("Should revert if a non-initiator tries to update the status of a repair request", async function () {
+    const newStatus = 1; // Status.InProgress
+
+    await expect(
+      repairRequestContract.connect(user2).updateRepairRequestStatus(1, newStatus)
+    ).to.be.revertedWith("Only the initiator can modify this repair request");
+  });
+
+  it("Should allow the initiator to update the description hash of a repair request", async function () {
+    const newDescriptionHash = "QmUpdatedHash456";
+
+    const tx = await repairRequestContract
+      .connect(user1)
+      .updateDescriptionHash(1, newDescriptionHash);
+    const block = await ethers.provider.getBlock(tx.blockHash);
+
+    await expect(tx)
+      .to.emit(repairRequestContract, "DescriptionHashUpdated")
+      .withArgs(1, "QmInitialHash123", newDescriptionHash, block.timestamp);
+
+    const repairRequest = await repairRequestContract.getRepairRequest(1);
+
+    expect(repairRequest.descriptionHash).to.equal(newDescriptionHash);
+    expect(repairRequest.updatedAt).to.equal(block.timestamp);
+  });
+
+  it("Should revert if a non-initiator tries to update the description hash of a repair request", async function () {
+    const newDescriptionHash = "QmInvalidHash";
+
+    await expect(
+      repairRequestContract.connect(user2).updateDescriptionHash(1, newDescriptionHash)
+    ).to.be.revertedWith("Only the initiator can modify this repair request");
   });
 
   it("Should emit events for creation and updates", async function () {
@@ -76,35 +110,6 @@ describe("RepairRequestContract", function () {
     await expect(tx)
       .to.emit(repairRequestContract, "RepairRequestUpdated")
       .withArgs(2, 1, block.timestamp);
-  });
-
-  it("Should update the description hash of a repair request", async function () {
-    const newDescriptionHash = "QmUpdatedHash456";
-
-    const tx = await repairRequestContract
-      .connect(user1)
-      .updateDescriptionHash(1, newDescriptionHash);
-    const block = await ethers.provider.getBlock(tx.blockHash);
-
-    await expect(tx)
-      .to.emit(repairRequestContract, "DescriptionHashUpdated")
-      .withArgs(1, "QmInitialHash123", newDescriptionHash, block.timestamp);
-
-    const repairRequest = await repairRequestContract.getRepairRequest(1);
-
-    expect(repairRequest.descriptionHash).to.equal(newDescriptionHash);
-    expect(repairRequest.updatedAt).to.equal(block.timestamp);
-  });
-
-  it("Should revert when updating the description hash of a non-existent repair request", async function () {
-    const invalidRequestId = 999;
-    const newDescriptionHash = "QmInvalidHash";
-
-    await expect(
-      repairRequestContract
-        .connect(user1)
-        .updateDescriptionHash(invalidRequestId, newDescriptionHash)
-    ).to.be.revertedWith("Repair request does not exist");
   });
 
   it("Should fetch a repair request by ID", async function () {

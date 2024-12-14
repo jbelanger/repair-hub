@@ -13,5 +13,9 @@ module.exports = {
     localhost: {
       url: "http://127.0.0.1:8545",
   },
+  // sepolia: {
+  //   url: "https://sepolia.infura.io/v3/cb216a419ae1451997d35de6e17afbb1", // Get from Infura
+  //   accounts: ["PUT_THIS_HERE"] // Your wallet private key
+  // },
   },
 };

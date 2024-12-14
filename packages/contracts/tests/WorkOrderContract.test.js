@@ -2,10 +2,10 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("WorkOrderContract", function () {
-  let WorkOrder, workOrderContract, owner, landlord, contractor;
+  let WorkOrder, workOrderContract, owner, landlord;
 
   beforeEach(async function () {
-    [owner, landlord, contractor] = await ethers.getSigners();
+    [owner, landlord] = await ethers.getSigners();
     WorkOrder = await ethers.getContractFactory("WorkOrderContract");
     workOrderContract = await WorkOrder.deploy();
 
@@ -16,7 +16,7 @@ describe("WorkOrderContract", function () {
 
     await workOrderContract
       .connect(landlord)
-      .createWorkOrder(repairRequestId, landlord.address, contractor.address, agreedPrice, descriptionHash);
+      .createWorkOrder(repairRequestId, landlord.address, agreedPrice, descriptionHash);
   });
 
   it("Should create a new work order", async function () {
@@ -26,14 +26,13 @@ describe("WorkOrderContract", function () {
 
     const tx = await workOrderContract
       .connect(landlord)
-      .createWorkOrder(repairRequestId, landlord.address, contractor.address, agreedPrice, descriptionHash);
+      .createWorkOrder(repairRequestId, landlord.address, agreedPrice, descriptionHash);
     await tx.wait();
 
     const workOrder = await workOrderContract.getWorkOrderById(2);
 
     expect(workOrder.repairRequestId).to.equal(repairRequestId);
     expect(workOrder.landlord).to.equal(landlord.address);
-    expect(workOrder.contractor).to.equal(contractor.address);
     expect(workOrder.agreedPrice).to.equal(agreedPrice);
     expect(workOrder.descriptionHash).to.equal(descriptionHash);
     expect(workOrder.status).to.equal(0); // Status.Draft
@@ -47,7 +46,7 @@ describe("WorkOrderContract", function () {
     // Add a second work order to the same repair request
     await workOrderContract
       .connect(landlord)
-      .createWorkOrder(repairRequestId, landlord.address, contractor.address, ethers.parseEther("1.5"), "QmTestHash456");
+      .createWorkOrder(repairRequestId, landlord.address, ethers.parseEther("1.5"), "QmTestHash456");
 
     const workOrderIds = await workOrderContract.getWorkOrdersByRepairRequest(repairRequestId);
     expect(workOrderIds.length).to.equal(2);
@@ -118,12 +117,12 @@ describe("WorkOrderContract", function () {
     // Create first work order
     await workOrderContract
       .connect(landlord)
-      .createWorkOrder(repairRequestId1, landlord.address, contractor.address, agreedPrice1, descriptionHash1);
+      .createWorkOrder(repairRequestId1, landlord.address, agreedPrice1, descriptionHash1);
 
     // Create second work order
     await workOrderContract
       .connect(landlord)
-      .createWorkOrder(repairRequestId2, landlord.address, contractor.address, agreedPrice2, descriptionHash2);
+      .createWorkOrder(repairRequestId2, landlord.address, agreedPrice2, descriptionHash2);
 
     const workOrder1 = await workOrderContract.getWorkOrderById(2);
     const workOrder2 = await workOrderContract.getWorkOrderById(3);

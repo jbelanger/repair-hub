@@ -58,6 +58,15 @@ contract RepairRequestContract {
         _;
     }
 
+    // Modifier to restrict access to the initiator of the repair request
+    modifier onlyInitiator(uint256 _id) {
+        require(
+            repairRequests[_id].initiator == msg.sender,
+            "Only the initiator can modify this repair request"
+        );
+        _;
+    }
+
     /**
      * @dev Create a new repair request
      * @param _propertyId The ID of the associated property (off-chain)
@@ -96,6 +105,7 @@ contract RepairRequestContract {
     function updateRepairRequestStatus(uint256 _id, Status _status)
         external
         requestExists(_id)
+        onlyInitiator(_id)
     {
         RepairRequest storage request = repairRequests[_id];
         request.status = _status;
@@ -112,6 +122,7 @@ contract RepairRequestContract {
     function updateDescriptionHash(uint256 _id, string memory _newDescriptionHash)
         external
         requestExists(_id)
+        onlyInitiator(_id)
     {
         RepairRequest storage request = repairRequests[_id];
         string memory oldHash = request.descriptionHash;

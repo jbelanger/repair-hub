@@ -10,15 +10,12 @@ contract WorkOrderContract {
         Completed,
         Cancelled
     }
-    // repairRequest repairR;
-    // mapping (uint256 => workOrders)
 
     // Struct to represent a work order
     struct WorkOrder {
         uint256 id;
         uint256 repairRequestId; // Reference to the repair request
         address landlord; // Landlord's address
-        address contractor; // Contractor's address
         uint256 agreedPrice; // Agreed payment for the repair
         string descriptionHash; // Hash of the detailed work order description (off-chain)
         Status status; // Status of the work order
@@ -38,7 +35,6 @@ contract WorkOrderContract {
         uint256 id,
         uint256 repairRequestId,
         address indexed landlord,
-        address indexed contractor,
         uint256 agreedPrice,
         string descriptionHash,
         uint256 createdAt
@@ -63,18 +59,25 @@ contract WorkOrderContract {
         _;
     }
 
+    // Modifier to restrict access to the landlord of the work order
+    modifier onlyLandlord(uint256 _id) {
+        require(
+            workOrders[_id].landlord == msg.sender,
+            "Only the landlord can modify this work order"
+        );
+        _;
+    }
+
     /**
      * @dev Create a new work order
      * @param _repairRequestId ID of the associated repair request
      * @param _landlord Address of the landlord
-     * @param _contractor Address of the contractor
      * @param _agreedPrice Agreed price for the repair
      * @param _descriptionHash Hash of the detailed work order description
      */
     function createWorkOrder(
         uint256 _repairRequestId,
         address _landlord,
-        address _contractor,
         uint256 _agreedPrice,
         string memory _descriptionHash
     ) external {
@@ -84,7 +87,6 @@ contract WorkOrderContract {
             id: newWorkOrderId,
             repairRequestId: _repairRequestId,
             landlord: _landlord,
-            contractor: _contractor,
             agreedPrice: _agreedPrice,
             descriptionHash: _descriptionHash,
             status: Status.Draft,
@@ -99,7 +101,6 @@ contract WorkOrderContract {
             newWorkOrderId,
             _repairRequestId,
             _landlord,
-            _contractor,
             _agreedPrice,
             _descriptionHash,
             block.timestamp
@@ -114,6 +115,7 @@ contract WorkOrderContract {
     function updateWorkOrderStatus(uint256 _id, Status _status)
         external
         workOrderExists(_id)
+        onlyLandlord(_id)
     {
         WorkOrder storage workOrder = workOrders[_id];
         workOrder.status = _status;
@@ -130,6 +132,7 @@ contract WorkOrderContract {
     function updateDescriptionHash(uint256 _id, string memory _newDescriptionHash)
         external
         workOrderExists(_id)
+        onlyLandlord(_id)
     {
         WorkOrder storage workOrder = workOrders[_id];
         string memory oldHash = workOrder.descriptionHash;

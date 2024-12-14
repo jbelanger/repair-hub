@@ -64,13 +64,12 @@ Represents a contractor or service provider.
 ---
 
 ## 5. RepairContract (Hybrid)
-Represents a contract for a repair task between the landlord and a contractor.
+Represents a contract for a repair task between the landlord and the system.
 
 | Field           | Type                               | Description                                          | Storage    |
 |------------------|------------------------------------|------------------------------------------------------|------------|
 | `id`            | UUID                               | Unique identifier for the repair contract.         | On-Chain   |
 | `repairRequestId`| UUID                              | Reference to the associated repair request.        | On-Chain   |
-| `contractorId`   | UUID                              | Reference to the contractor handling the task.     | Off-Chain  |
 | `agreedPrice`    | Decimal                           | Price agreed upon for the task.                    | On-Chain   |
 | `status`         | Enum (`Draft`, `Signed`, `In Progress`, `Completed`, `Cancelled`) | Contract status. | On-Chain   |
 | `startDate`      | DateTime                          | Scheduled start date of the work.                  | Off-Chain  |
@@ -91,10 +90,7 @@ Represents a contract for a repair task between the landlord and a contractor.
 3. **RepairRequest ↔ RepairContract**:  
    - A repair request can result in one or more repair contracts.
 
-4. **RepairContract ↔ Contractor**:  
-   - Each contract is assigned to a single contractor.
-
-5. **User ↔ Property**:  
+4. **User ↔ Property**:  
    - A landlord owns multiple properties, and a property can have multiple tenants.
 
 ---
@@ -123,4 +119,3 @@ Represents a contract for a repair task between the landlord and a contractor.
 3. **Iterate and Test**:
    - Ensure data integrity between on-chain and off-chain components using hashes.
    - Validate workflows for repair requests and contracts.
-
