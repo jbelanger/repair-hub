@@ -18,6 +18,7 @@ startTransition(() => {
     </StrictMode>
   );
 });
+}
 
 if ('requestIdleCallback' in window) {
   requestIdleCallback(hydrate);
@@ -25,5 +26,4 @@ if ('requestIdleCallback' in window) {
   // Safari doesn't support requestIdleCallback
   // https://caniuse.com/requestidlecallback
   setTimeout(hydrate, 1);
-}
 }
