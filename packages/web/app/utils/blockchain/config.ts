@@ -1,5 +1,6 @@
-import { http, createConfig } from 'wagmi'
+import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 import { sepolia } from 'wagmi/chains'
+import { http } from 'wagmi'
 
 export const CONTRACT_ADDRESSES = {
   REPAIR_REQUEST: import.meta.env.VITE_REPAIR_REQUEST_CONTRACT,
@@ -44,8 +45,10 @@ export interface WorkOrder {
   updatedAt: bigint
 }
 
-// Configure chains & providers
-export const config = createConfig({
+// Configure chains & providers with RainbowKit
+export const config = getDefaultConfig({
+  appName: 'Repair Hub',
+  projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID,
   chains: [sepolia],
   transports: {
     [sepolia.id]: http()

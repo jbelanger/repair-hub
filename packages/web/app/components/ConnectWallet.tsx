@@ -1,63 +1,83 @@
-import { useAccount, useConnect, useDisconnect } from 'wagmi'
-import { injected } from 'wagmi/connectors'
-import { useNavigate } from '@remix-run/react'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { Wallet2, ChevronDown, ExternalLink } from 'lucide-react'
 
 interface ConnectWalletProps {
   onConnect?: () => void
 }
 
 export function ConnectWallet({ onConnect }: ConnectWalletProps) {
-  const { address, isConnected } = useAccount()
-  const { connect } = useConnect()
-  const { disconnect } = useDisconnect()
-  const navigate = useNavigate()
-
-  const handleConnect = async () => {
-    try {
-      // Check if MetaMask is installed
-      if (typeof window.ethereum === 'undefined') {
-        throw new Error(
-          'MetaMask is not installed. Please install MetaMask to continue.'
-        )
-      }
-
-      await connect({ 
-        connector: injected(),
-        chainId: 11155111 // Sepolia chain ID
-      })
-      
-      console.log('Wallet connected successfully')
-      onConnect?.()
-      
-    } catch (error) {
-      console.error('Failed to connect wallet:', error)
-    }
-  }
-
-  if (isConnected && address) {
-    return (
-      <div className="flex items-center space-x-4">
-        <span className="text-sm text-gray-700">
-          Connected: {`${address.slice(0, 6)}...${address.slice(-4)}`}
-        </span>
-        <button
-          onClick={() => disconnect()}
-          className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-        >
-          Disconnect
-        </button>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex flex-col items-start">
-      <button
-        onClick={handleConnect}
-        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-      >
-        Connect Wallet
-      </button>
-    </div>
+    <ConnectButton.Custom>
+      {({
+        account,
+        chain,
+        openAccountModal,
+        openChainModal,
+        openConnectModal,
+        mounted,
+      }) => {
+        const ready = mounted
+        if (!ready) {
+          return null
+        }
+
+        if (!account) {
+          return (
+            <button
+              onClick={openConnectModal}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+            >
+              <Wallet2 className="w-4 h-4" />
+              Connect Wallet
+            </button>
+          )
+        }
+
+        if (chain?.unsupported) {
+          return (
+            <button
+              onClick={openChainModal}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Wrong network
+            </button>
+          )
+        }
+
+        return (
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={openChainModal}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+            >
+              {chain?.hasIcon && chain?.iconUrl && (
+                <div className="w-4 h-4 overflow-hidden rounded-full">
+                  <img
+                    alt={chain.name ?? 'Chain icon'}
+                    src={chain.iconUrl}
+                    className="w-full h-full"
+                  />
+                </div>
+              )}
+              {chain?.name ?? 'Unknown'}
+              <ChevronDown className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={openAccountModal}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors"
+            >
+              <div className="w-4 h-4 rounded-full bg-indigo-100 flex items-center justify-center">
+                <Wallet2 className="w-3 h-3 text-indigo-600" />
+              </div>
+              {account.displayName}
+              {account.displayBalance ? ` (${account.displayBalance})` : ''}
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
+        )
+      }}
+    </ConnectButton.Custom>
   )
 }

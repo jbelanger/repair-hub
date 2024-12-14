@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.0.1",
+    "@rainbow-me/rainbowkit": "^2.2.1",
     "@react-google-maps/api": "^2.20.3",
     "@remix-run/node": "^2.15.1",
     "@remix-run/react": "^2.15.1",

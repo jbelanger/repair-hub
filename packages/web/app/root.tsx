@@ -7,7 +7,9 @@ import {
 } from "@remix-run/react";
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 import { config } from "./utils/blockchain/config";
+import '@rainbow-me/rainbowkit/styles.css';
 import "./tailwind.css";
 
 const queryClient = new QueryClient()
@@ -24,7 +26,9 @@ export default function App() {
       <body>
         <WagmiProvider config={config}>
           <QueryClientProvider client={queryClient}>
-            <Outlet />
+            <RainbowKitProvider theme={darkTheme()}>
+              <Outlet />
+            </RainbowKitProvider>
           </QueryClientProvider>
         </WagmiProvider>
         <ScrollRestoration />
