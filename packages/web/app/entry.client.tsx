@@ -8,6 +8,8 @@ import { RemixBrowser } from "@remix-run/react";
 import { startTransition, StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
 
+
+async function hydrate() {
 startTransition(() => {
   hydrateRoot(
     document,
@@ -16,3 +18,12 @@ startTransition(() => {
     </StrictMode>
   );
 });
+
+if ('requestIdleCallback' in window) {
+  requestIdleCallback(hydrate);
+} else {
+  // Safari doesn't support requestIdleCallback
+  // https://caniuse.com/requestidlecallback
+  setTimeout(hydrate, 1);
+}
+}
