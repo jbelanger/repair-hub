@@ -2,11 +2,101 @@
 @tailwind components;
 @tailwind utilities;
 
-html,
-body {
-  @apply bg-white dark:bg-gray-950;
+@layer base {
+  html {
+    @apply antialiased;
+  }
+  
+  body {
+    @apply bg-background text-purple-300;
+    background-image: radial-gradient(circle at center, theme('colors.background.lighter'), theme('colors.background.DEFAULT'), theme('colors.background.DEFAULT'));
+  }
+}
 
-  @media (prefers-color-scheme: dark) {
-    color-scheme: dark;
+@layer components {
+  .glass-panel {
+    @apply border border-white/[0.04] bg-background-card/90 backdrop-blur-sm;
+  }
+
+  .glass-button {
+    @apply rounded-lg bg-white/[0.03] px-4 py-2 text-purple-300 ring-1 ring-white/[0.04] 
+           transition-all hover:bg-white/[0.06] hover:text-purple-200 
+           active:bg-white/[0.08] active:scale-[0.98];
+  }
+
+  .glass-input {
+    @apply rounded-lg bg-white/[0.03] px-4 py-2 text-purple-300 ring-1 ring-white/[0.04] 
+           placeholder:text-purple-300/40
+           focus:outline-none focus:ring-2 focus:ring-accent-purple/20
+           hover:bg-white/[0.04];
+  }
+
+  .glass-card {
+    @apply overflow-hidden rounded-2xl border border-white/[0.04] bg-background-card/90 backdrop-blur-sm;
+  }
+
+  .nav-link {
+    @apply flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-purple-300/70 
+           transition-colors hover:bg-white/[0.03] hover:text-purple-300;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-purple-300 via-accent-purple to-accent-pink bg-clip-text text-transparent;
+  }
+}
+
+@layer utilities {
+  .animate-gradient {
+    background-size: 200% auto;
+    animation: gradient 8s linear infinite;
+  }
+
+  @keyframes gradient {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .glow {
+    @apply shadow-[0_0_20px_rgba(123,92,255,0.3)];
+  }
+
+  .glow-sm {
+    @apply shadow-[0_0_10px_rgba(123,92,255,0.2)];
+  }
+
+  .glow-lg {
+    @apply shadow-[0_0_30px_rgba(123,92,255,0.4)];
+  }
+
+  .bg-dot-pattern {
+    background-image: radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .bg-glass-gradient {
+    @apply bg-gradient-to-br from-white/[0.03] to-transparent;
+  }
+
+  .text-shadow {
+    text-shadow: 0 2px 10px rgba(140, 117, 255, 0.3);
+  }
+
+  .text-glow {
+    text-shadow: 0 0 20px rgba(140, 117, 255, 0.5);
+  }
+
+  .hover-glow {
+    @apply transition-all duration-300;
+  }
+
+  .hover-glow:hover {
+    @apply shadow-[0_0_20px_rgba(123,92,255,0.4)] -translate-y-0.5;
   }
 }

@@ -50,16 +50,16 @@ export default function Register() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-8">Register</h1>
+      <h1 className="text-3xl font-bold mb-8 text-primary-300">Register</h1>
 
       {!address ? (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
+        <div className="bg-tertiary-900 border-l-4 border-tertiary-500 text-tertiary-300 p-4 mb-4">
           Please connect your wallet first to register.
         </div>
       ) : (
         <Form method="post" className="max-w-md space-y-4">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="name" className="block text-sm font-medium text-neutral-white">
               Name
             </label>
             <input
@@ -67,12 +67,12 @@ export default function Register() {
               name="name"
               id="name"
               required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              className="mt-1 block w-full rounded-md border-primary-700 bg-primary-900 text-neutral-white shadow-sm focus:border-primary-400 focus:ring-primary-400"
             />
           </div>
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="email" className="block text-sm font-medium text-neutral-white">
               Email
             </label>
             <input
@@ -80,19 +80,19 @@ export default function Register() {
               name="email"
               id="email"
               required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              className="mt-1 block w-full rounded-md border-primary-700 bg-primary-900 text-neutral-white shadow-sm focus:border-primary-400 focus:ring-primary-400"
             />
           </div>
 
           <div>
-            <label htmlFor="role" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="role" className="block text-sm font-medium text-neutral-white">
               Role
             </label>
             <select
               name="role"
               id="role"
               required
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              className="mt-1 block w-full rounded-md border-primary-700 bg-primary-900 text-neutral-white shadow-sm focus:border-primary-400 focus:ring-primary-400"
             >
               <option value="">Select a role</option>
               <option value="TENANT">Tenant</option>
@@ -101,34 +101,34 @@ export default function Register() {
           </div>
 
           <div>
-            <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="phone" className="block text-sm font-medium text-neutral-white">
               Phone (optional)
             </label>
             <input
               type="tel"
               name="phone"
               id="phone"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+              className="mt-1 block w-full rounded-md border-primary-700 bg-primary-900 text-neutral-white shadow-sm focus:border-primary-400 focus:ring-primary-400"
             />
           </div>
 
           <input type="hidden" name="address" value={address} />
 
           {actionData?.error && (
-            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4">
+            <div className="bg-secondary-900 border-l-4 border-secondary-500 text-secondary-300 p-4">
               {actionData.error}
             </div>
           )}
 
           {actionData?.success && (
-            <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4">
+            <div className="bg-primary-900 border-l-4 border-primary-500 text-primary-300 p-4">
               Registration successful!
             </div>
           )}
 
           <button
             type="submit"
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-neutral-white bg-primary-600 hover:bg-primary-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-400 transition-colors"
           >
             Register
           </button>
