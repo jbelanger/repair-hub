@@ -40,8 +40,12 @@ export function ConnectWallet({ onConnect }: ConnectWalletProps) {
   }, [address, fetcher])
 
   useEffect(() => {
-    if (fetcher.data && !fetcher.data.userRole) {
-      navigate('/register')
+    if (fetcher.data) {
+      if (!fetcher.data.userRole) {
+        navigate('/register')
+      } else {
+        navigate('/repair-requests')
+      }
     }
   }, [fetcher.data, navigate])
 

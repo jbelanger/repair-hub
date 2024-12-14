@@ -1,5 +1,5 @@
-import { json, type ActionFunctionArgs } from "@remix-run/node";
-import { Form, useActionData } from "@remix-run/react";
+import { json, redirect, type ActionFunctionArgs } from "@remix-run/node";
+import { Form, useActionData, useNavigation } from "@remix-run/react";
 import { useAccount } from "wagmi";
 import { db } from "~/utils/db.server";
 import { Input } from "~/components/ui/Input";
@@ -7,6 +7,7 @@ import { Select } from "~/components/ui/Select";
 import { Button } from "~/components/ui/Button";
 import { User, Mail, Phone, MapPin } from "lucide-react";
 import { useState } from "react";
+import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 
 type ActionData = {
   success?: boolean;
@@ -19,9 +20,10 @@ export async function action({ request }: ActionFunctionArgs) {
   const email = formData.get("email") as string;
   const role = formData.get("role") as string;
   const phone = formData.get("phone") as string;
+  const propertyLocation = formData.get("propertyLocation") as string;
   const address = formData.get("address") as string;
 
-  if (!name || !email || !role || !address) {
+  if (!name || !email || !role || !propertyLocation || !address) {
     return json<ActionData>(
       { success: false, error: "All fields except phone are required" },
       { status: 400 }
@@ -29,19 +31,84 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   try {
+    // Check if user already exists with this address
+    const existingUser = await db.user.findUnique({
+      where: { address },
+    });
+
+    if (existingUser) {
+      return json<ActionData>(
+        { 
+          success: false, 
+          error: "An account with this wallet address already exists" 
+        },
+        { status: 400 }
+      );
+    }
+
+    // Create the user if they don't exist
     const user = await db.user.create({
       data: {
         name,
         email,
         role,
         phone: phone || null,
-        address,
+        address, // This is the Ethereum address
       },
     });
 
-    return json<ActionData>({ success: true });
+    // Handle property creation based on role
+    if (role === "LANDLORD") {
+      await db.property.create({
+        data: {
+          address: propertyLocation,
+          landlord: {
+            connect: {
+              id: user.id
+            }
+          }
+        },
+      });
+    } else if (role === "TENANT") {
+      // For tenants, we'll need a landlord to assign the property to them later
+      await db.property.create({
+        data: {
+          address: propertyLocation,
+          tenants: {
+            connect: {
+              id: user.id
+            }
+          },
+          // Set a temporary landlord (you might want to handle this differently)
+          landlord: {
+            connect: {
+              // You might want to have a system admin account for temporary assignments
+              id: user.id // Temporary: connecting to self as landlord
+            }
+          }
+        },
+      });
+    }
+
+    return redirect("/");
   } catch (error) {
     console.error("Registration error:", error);
+    
+    // Handle specific Prisma errors
+    if (error instanceof PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        // P2002 is Prisma's error code for unique constraint violations
+        const field = (error.meta?.target as string[])?.[0] || 'field';
+        return json<ActionData>(
+          { 
+            success: false, 
+            error: `This ${field} is already registered. Please use a different ${field}.` 
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     return json<ActionData>(
       { success: false, error: "Failed to register user" },
       { status: 500 }
@@ -52,7 +119,9 @@ export async function action({ request }: ActionFunctionArgs) {
 export default function Register() {
   const { address } = useAccount();
   const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
   const [selectedRole, setSelectedRole] = useState("");
+  const isSubmitting = navigation.state === "submitting";
 
   return (
     <div className="max-w-md mx-auto">
@@ -110,8 +179,8 @@ export default function Register() {
 
             <Input
               type="text"
-              name="address"
-              id="address"
+              name="propertyLocation"
+              id="propertyLocation"
               placeholder="Property Address"
               required
               leftIcon={<MapPin className="h-5 w-5" />}
@@ -126,19 +195,14 @@ export default function Register() {
             </div>
           )}
 
-          {actionData?.success && (
-            <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 text-green-200">
-              Registration successful!
-            </div>
-          )}
-
           <Button
             type="submit"
             variant="primary"
             className="w-full"
             size="lg"
+            disabled={isSubmitting}
           >
-            Create Account
+            {isSubmitting ? "Creating Account..." : "Create Account"}
           </Button>
 
           <p className="text-center text-sm text-white/50">
