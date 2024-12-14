@@ -1,11 +1,50 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { Wallet2, ChevronDown, ExternalLink } from 'lucide-react'
+import { useNavigate, useFetcher } from '@remix-run/react'
+import { useEffect, useRef } from 'react'
+import { useAccount } from 'wagmi'
 
 interface ConnectWalletProps {
   onConnect?: () => void
 }
 
+type LoaderData = {
+  repairRequests: Array<{
+    id: string;
+    description: string;
+    urgency: string;
+    status: string;
+    propertyId: string;
+    property: {
+      address: string;
+    };
+    initiator: {
+      name: string;
+      address: string;
+    };
+  }>;
+  userRole?: string;
+};
+
 export function ConnectWallet({ onConnect }: ConnectWalletProps) {
+  const navigate = useNavigate()
+  const { address } = useAccount()
+  const fetcher = useFetcher<LoaderData>()
+  const hasCheckedRef = useRef(false)
+
+  useEffect(() => {
+    if (address && !hasCheckedRef.current && !fetcher.data) {
+      hasCheckedRef.current = true
+      fetcher.load(`/repair-requests?address=${address}`)
+    }
+  }, [address, fetcher])
+
+  useEffect(() => {
+    if (fetcher.data && !fetcher.data.userRole) {
+      navigate('/register')
+    }
+  }, [fetcher.data, navigate])
+
   return (
     <ConnectButton.Custom>
       {({
@@ -25,7 +64,7 @@ export function ConnectWallet({ onConnect }: ConnectWalletProps) {
           return (
             <button
               onClick={openConnectModal}
-              className="flex items-center gap-2 rounded-lg bg-purple-500/10 px-4 py-2 text-sm font-medium text-purple-300 ring-1 ring-purple-500/20 transition-all hover:bg-purple-500/20 hover:text-purple-200"
+              className="flex items-center gap-2 rounded-lg bg-[#7B5CFF] px-4 py-2 text-sm font-medium text-white hover:bg-[#8C75FF] transition-colors"
             >
               <Wallet2 className="h-4 w-4" />
               Connect Wallet
@@ -37,7 +76,7 @@ export function ConnectWallet({ onConnect }: ConnectWalletProps) {
           return (
             <button
               onClick={openChainModal}
-              className="flex items-center gap-2 rounded-lg bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 ring-1 ring-red-500/20 transition-all hover:bg-red-500/20 hover:text-red-200"
+              className="flex items-center gap-2 rounded-lg bg-red-500/20 px-4 py-2 text-sm font-medium text-white ring-1 ring-red-500/30 hover:bg-red-500/30 transition-colors"
             >
               <ExternalLink className="h-4 w-4" />
               Wrong network
@@ -49,7 +88,7 @@ export function ConnectWallet({ onConnect }: ConnectWalletProps) {
           <div className="flex items-center gap-2">
             <button
               onClick={openChainModal}
-              className="flex items-center gap-2 rounded-lg bg-purple-500/10 px-3 py-2 text-sm text-purple-300 ring-1 ring-purple-500/20 transition-all hover:bg-purple-500/20 hover:text-purple-200"
+              className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/[0.1] hover:bg-white/[0.06] transition-colors"
             >
               {chain?.hasIcon && chain?.iconUrl && (
                 <div className="h-4 w-4 overflow-hidden rounded-full">
@@ -66,10 +105,10 @@ export function ConnectWallet({ onConnect }: ConnectWalletProps) {
 
             <button
               onClick={openAccountModal}
-              className="flex items-center gap-2 rounded-lg bg-purple-500/10 px-3 py-2 text-sm text-purple-300 ring-1 ring-purple-500/20 transition-all hover:bg-purple-500/20 hover:text-purple-200"
+              className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-3 py-2 text-sm text-white ring-1 ring-white/[0.1] hover:bg-white/[0.06] transition-colors"
             >
-              <div className="flex h-4 w-4 items-center justify-center rounded-full bg-purple-400/10">
-                <Wallet2 className="h-3 w-3 text-purple-300" />
+              <div className="flex h-4 w-4 items-center justify-center rounded-full bg-white/[0.1]">
+                <Wallet2 className="h-3 w-3" />
               </div>
               <span className="max-w-24 truncate">{account.displayName}</span>
               {account.displayBalance && (

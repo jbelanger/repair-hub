@@ -6,6 +6,7 @@ import { config } from "~/utils/blockchain/config";
 import { Home, Wrench, Bell, Settings } from 'lucide-react';
 import '@rainbow-me/rainbowkit/styles.css';
 import { ConnectWallet } from "~/components/ConnectWallet";
+import { Button } from "~/components/ui/Button";
 
 const queryClient = new QueryClient()
 
@@ -30,10 +31,10 @@ export default function Layout() {
                       to="/" 
                       className="flex items-center gap-3"
                     >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10 ring-1 ring-purple-500/20">
-                        <span className="text-lg font-semibold text-purple-300">R</span>
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.03] ring-1 ring-white/[0.1]">
+                        <span className="text-lg font-semibold text-white">R</span>
                       </div>
-                      <span className="text-lg font-semibold text-purple-300">
+                      <span className="text-lg font-semibold text-white">
                         RepairHub
                       </span>
                     </Link>
@@ -46,7 +47,7 @@ export default function Layout() {
                           <Link
                             key={item.name}
                             to={item.href}
-                            className="nav-link"
+                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/[0.03] hover:text-white"
                           >
                             <Icon className="h-4 w-4" />
                             <span>{item.name}</span>
@@ -58,12 +59,12 @@ export default function Layout() {
 
                   {/* Right side navigation */}
                   <div className="flex items-center gap-2">
-                    <button className="flex h-9 w-9 items-center justify-center rounded-lg text-purple-300/70 transition-colors hover:bg-white/[0.03] hover:text-purple-300">
+                    <Button variant="ghost" size="icon">
                       <Bell className="h-5 w-5" />
-                    </button>
-                    <button className="flex h-9 w-9 items-center justify-center rounded-lg text-purple-300/70 transition-colors hover:bg-white/[0.03] hover:text-purple-300">
+                    </Button>
+                    <Button variant="ghost" size="icon">
                       <Settings className="h-5 w-5" />
-                    </button>
+                    </Button>
                     <div className="mx-2 h-5 w-px bg-white/[0.04]" />
                     <ConnectWallet />
                   </div>

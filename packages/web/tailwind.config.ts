@@ -18,11 +18,21 @@ export default {
           300: '#C4B8FF', // Brighter text
           400: '#A594FF',
           500: '#8C75FF', // Vibrant accent
-          600: '#7155FF',
+          600: '#7C3AED', // Primary button
           700: '#5434FF',
           800: '#3F1DDB',
           900: '#2D0FB3',
           950: '#1A0B38',
+        },
+        gray: {
+          700: '#374151',
+          800: '#1F2937',
+          900: '#111827',
+        },
+        blue: {
+          400: '#60A5FA',
+          500: '#3B82F6',
+          600: '#2563EB',
         },
         accent: {
           purple: '#8C75FF',  // Primary accent
