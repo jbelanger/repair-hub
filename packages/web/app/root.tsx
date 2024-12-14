@@ -5,16 +5,24 @@ import {
   Scripts,
   ScrollRestoration,
 } from "@remix-run/react";
-import { WagmiProvider } from 'wagmi'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
-import { config } from "./utils/blockchain/config";
-import '@rainbow-me/rainbowkit/styles.css';
+import type { LinksFunction } from "@remix-run/node";
+
 import "./tailwind.css";
 
-const queryClient = new QueryClient()
+export const links: LinksFunction = () => [
+  { rel: "preconnect", href: "https://fonts.googleapis.com" },
+  {
+    rel: "preconnect",
+    href: "https://fonts.gstatic.com",
+    crossOrigin: "anonymous",
+  },
+  {
+    rel: "stylesheet",
+    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+  },
+];
 
-export default function App() {
+export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
@@ -24,13 +32,7 @@ export default function App() {
         <Links />
       </head>
       <body>
-        <WagmiProvider config={config}>
-          <QueryClientProvider client={queryClient}>
-            <RainbowKitProvider theme={darkTheme()}>
-              <Outlet />
-            </RainbowKitProvider>
-          </QueryClientProvider>
-        </WagmiProvider>
+        {children}
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -38,31 +40,6 @@ export default function App() {
   );
 }
 
-export function ErrorBoundary({ error }: { error: Error }) {
-  return (
-    <html>
-      <head>
-        <title>Error!</title>
-        <Meta />
-        <Links />
-      </head>
-      <body>
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-          <div className="bg-white p-8 rounded-lg shadow-lg max-w-md w-full">
-            <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
-            <p className="text-gray-600 mb-4">
-              {error?.message || "An unexpected error occurred."}
-            </p>
-            <a
-              href="/"
-              className="block w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 text-center"
-            >
-              Return Home
-            </a>
-          </div>
-        </div>
-        <Scripts />
-      </body>
-    </html>
-  );
+export default function App() {
+  return <Outlet />;
 }
