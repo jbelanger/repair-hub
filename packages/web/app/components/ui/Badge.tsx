@@ -12,11 +12,11 @@ export function Badge({
   ...props 
 }: BadgeProps) {
   const variants = {
-    default: "bg-purple-600/10 text-purple-200 border-purple-600/20",
-    primary: "bg-blue-500/10 text-blue-200 border-blue-500/20",
-    success: "bg-green-500/10 text-green-200 border-green-500/20",
-    warning: "bg-yellow-500/10 text-yellow-200 border-yellow-500/20",
-    danger: "bg-red-500/10 text-red-200 border-red-500/20",
+    default: "bg-purple-600/20 text-purple-100 border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.1)]",
+    primary: "bg-blue-500/20 text-blue-100 border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.1)]",
+    success: "bg-green-500/20 text-green-100 border-green-500/40 shadow-[0_0_10px_rgba(34,197,94,0.1)]",
+    warning: "bg-yellow-500/20 text-yellow-100 border-yellow-500/40 shadow-[0_0_10px_rgba(234,179,8,0.1)]",
+    danger: "bg-red-500/20 text-red-100 border-red-500/40 shadow-[0_0_10px_rgba(239,68,68,0.1)]",
   };
 
   const sizes = {
@@ -27,7 +27,7 @@ export function Badge({
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-full border font-medium",
+        "inline-flex items-center rounded-full border font-semibold border-[1.5px]",
         variants[variant],
         sizes[size],
         className

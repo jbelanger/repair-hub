@@ -1,5 +1,5 @@
 import { useAccount } from "wagmi";
-import { ClipboardList, Home, Wrench } from "lucide-react";
+import { ClipboardList, Wrench } from "lucide-react";
 import { LinkButton } from "~/components/ui/LinkButton";
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
@@ -25,16 +25,25 @@ export default function Index() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[80vh] text-center px-4">
-      <div className="flex gap-4 mb-8">
-        <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
-          <Home className="h-6 w-6 text-purple-400" />
-        </div>
-        <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
-          <Wrench className="h-6 w-6 text-purple-400" />
-        </div>
-        <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
-          <ClipboardList className="h-6 w-6 text-purple-400" />
-        </div>
+      {/* Large centered logo with gradient overlay */}
+      <div className="relative mb-8 -mt-8 group">
+        <div 
+          className="h-80 w-80 transition-all duration-500 group-hover:scale-105 group-hover:opacity-100 opacity-40"
+          style={{
+            WebkitMask: `url(/logo5.svg) center/contain no-repeat`,
+            mask: `url(/logo5.svg) center/contain no-repeat`,
+            backgroundColor: '#2563eb',
+            filter: 'drop-shadow(0 0 30px rgba(37, 99, 235, 0.2))',
+          }}
+        />
+        {/* Subtle gradient overlay */}
+        <div 
+          className="absolute inset-0 bg-gradient-to-b from-transparent to-background opacity-50"
+          style={{
+            WebkitMask: `url(/logo5.svg) center/contain no-repeat`,
+            mask: `url(/logo5.svg) center/contain no-repeat`,
+          }}
+        />
       </div>
 
       <h1 className="text-4xl font-bold text-white mb-4">
@@ -96,7 +105,14 @@ export default function Index() {
       <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-4xl mx-auto text-left">
         <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-6">
           <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
-            <Home className="h-6 w-6 text-purple-400" />
+            <div 
+              className="h-6 w-6"
+              style={{
+                WebkitMask: `url(/logo5.svg) center/contain no-repeat`,
+                mask: `url(/logo5.svg) center/contain no-repeat`,
+                backgroundColor: '#a855f7',
+              }}
+            />
           </div>
           <h3 className="text-lg font-medium text-purple-300 mb-2">
             Property Management

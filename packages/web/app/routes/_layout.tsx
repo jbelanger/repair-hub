@@ -1,21 +1,21 @@
 import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
-import { Link, Outlet, useLoaderData } from "@remix-run/react";
+import { Link, Outlet, useLoaderData, useLocation } from "@remix-run/react";
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 import { config } from "~/utils/blockchain/config";
-import { Home, Wrench, Bell, Settings } from 'lucide-react';
+import { Bell, Settings } from 'lucide-react';
 import '@rainbow-me/rainbowkit/styles.css';
 import { ConnectWallet } from "~/components/ConnectWallet";
 import { Button } from "~/components/ui/Button";
+import { Logo } from "~/components/Logo";
 import { getUserFromSession, createUserSession } from "~/utils/session.server";
 import { db } from "~/utils/db.server";
 
 const queryClient = new QueryClient()
 
 const navigation = [
-  { name: 'Home', href: '/', icon: Home },
-  { name: 'Repair Requests', href: '/repair-requests', icon: Wrench },
+  { name: 'Repair Requests', href: '/repair-requests' },
 ];
 
 type LoaderData = {
@@ -75,6 +75,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export default function Layout() {
   const { user } = useLoaderData<typeof loader>();
+  const location = useLocation();
 
   return (
     <WagmiProvider config={config}>
@@ -85,33 +86,25 @@ export default function Layout() {
             <nav className="fixed top-0 z-50 w-full border-b border-white/[0.02] bg-background/80 backdrop-blur-xl">
               <div className="mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex h-16 items-center justify-between">
-                  <div className="flex items-center gap-8">
-                    {/* Logo */}
-                    <Link 
-                      to="/" 
-                      className="flex items-center gap-3"
-                    >
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.03] ring-1 ring-white/[0.1]">
-                        <span className="text-lg font-semibold text-white">R</span>
-                      </div>
-                      <span className="text-lg font-semibold text-white">
-                        RepairHub
-                      </span>
-                    </Link>
+                  <div className="flex items-center gap-6">
+                    <Logo logoSrc="/logo5.svg" size="xl" className="py-1" />
                     
                     {/* Main Navigation - Only show if user is authenticated */}
                     {user && (
                       <div className="hidden md:flex md:gap-1">
                         {navigation.map((item) => {
-                          const Icon = item.icon;
+                          const isActive = location.pathname.startsWith(item.href);
                           return (
                             <Link
                               key={item.name}
                               to={item.href}
-                              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white/70 transition-colors hover:bg-white/[0.03] hover:text-white"
+                              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors
+                                ${isActive 
+                                  ? 'bg-white/[0.04] text-white' 
+                                  : 'text-white/70 hover:bg-white/[0.02] hover:text-white'
+                                }`}
                             >
-                              <Icon className="h-4 w-4" />
-                              <span>{item.name}</span>
+                              {item.name}
                             </Link>
                           );
                         })}
@@ -123,10 +116,18 @@ export default function Layout() {
                   <div className="flex items-center gap-2">
                     {user && (
                       <>
-                        <Button variant="ghost" size="icon">
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="hover:bg-white/[0.02]"
+                        >
                           <Bell className="h-5 w-5" />
                         </Button>
-                        <Button variant="ghost" size="icon">
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="hover:bg-white/[0.02]"
+                        >
                           <Settings className="h-5 w-5" />
                         </Button>
                         <div className="mx-2 h-5 w-px bg-white/[0.04]" />
