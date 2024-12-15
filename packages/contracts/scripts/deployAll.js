@@ -1,10 +1,9 @@
 const hre = require("hardhat");
-const { deployRepairRequest, deployWorkOrder } = require("../utils/deployContracts");
+const { deployRepairRequest } = require("../utils/deployContracts");
 
 async function main() {
-  console.log("Starting deployment of all contracts...");
+  console.log("Starting deployment of all contracts...");  
   await deployRepairRequest();
-  await deployWorkOrder();  
   console.log("All contracts deployed successfully!");
 }
 

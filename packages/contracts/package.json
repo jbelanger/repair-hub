@@ -16,5 +16,9 @@
     "chai": "4",
     "ethers": "^6.13.4",
     "hardhat": "^2.22.16"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
+    "pnpm": "^9.15.0"
   }
 }

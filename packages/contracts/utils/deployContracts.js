@@ -7,14 +7,6 @@ async function deployRepairRequest() {
     return contract.target;
 }
 
-async function deployWorkOrder() {
-    const WorkOrder = await hre.ethers.getContractFactory("WorkOrderContract");
-    const workOrder = await WorkOrder.deploy();    
-    console.log("WorkOrderContract deployed to:", workOrder.target);
-    return workOrder.target;
-}
-
 module.exports = {
-    deployRepairRequest,
-    deployWorkOrder
+    deployRepairRequest
 };

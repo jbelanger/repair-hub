@@ -2,7 +2,7 @@ const hre = require("hardhat");
 const { deployRepairRequest } = require("../utils/deployContracts");
 
 async function main() {
-  const repairRequestAddress = await deployRepairRequest();
+  const repairRequestAddress = await deployRepairRequest2();
   console.log("RepairRequestContract deployed at:", repairRequestAddress);
 }
 
