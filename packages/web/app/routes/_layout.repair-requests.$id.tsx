@@ -8,7 +8,7 @@ import { Card, CardHeader, CardContent, CardFooter } from "~/components/ui/Card"
 import { Badge } from "~/components/ui/Badge";
 import { Select } from "~/components/ui/Select";
 import { Button } from "~/components/ui/Button";
-import { ArrowLeft, Building2, User, Calendar, Clock, Hash, Link, History, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Building2, User, Calendar, Clock, Hash, Link, History } from 'lucide-react';
 import { useEffect, useState, useCallback } from "react";
 
 type LoaderData = {
@@ -267,96 +267,97 @@ export default function RepairRequestDetails() {
                 <p className="text-white/70">Loading blockchain data...</p>
               ) : blockchainRequest ? (
                 <>
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3">
-                      <Hash className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                      <div className="space-y-1 flex-1">
-                        <p className="text-white/70">Transaction Hash</p>
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-white break-all">{repairRequest.hash}</p>
-                          {getEtherscanLink('tx', repairRequest.hash) && (
+                  <div className="grid gap-4">
+                    <div className="flex flex-col space-y-4">
+                      <div className="flex items-start gap-3">
+                        <Hash className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <p className="text-white/70">Transaction Hash</p>
+                          {getEtherscanLink('tx', repairRequest.hash) ? (
                             <a
                               href={getEtherscanLink('tx', repairRequest.hash)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                              title="Click to view on Etherscan (opens in a new tab)"
+                              className="text-white text-sm font-mono hover:text-purple-300 transition-colors cursor-pointer"
                             >
-                              View on Etherscan
-                              <ExternalLink className="h-4 w-4" />
+                              {repairRequest.hash}
                             </a>
+                          ) : (
+                            <p className="text-white text-sm font-mono">{repairRequest.hash}</p>
                           )}
                         </div>
                       </div>
-                    </div>
-                    
-                    <div className="flex items-start gap-3">
-                      <User className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                      <div className="space-y-1 flex-1">
-                        <p className="text-white/70">Initiator Address</p>
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-white break-all">{blockchainRequest.initiator}</p>
-                          {getEtherscanLink('address', blockchainRequest.initiator) && (
+                      
+                      <div className="flex items-start gap-3">
+                        <User className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <p className="text-white/70">Initiator Address</p>
+                          {getEtherscanLink('address', blockchainRequest.initiator) ? (
                             <a
                               href={getEtherscanLink('address', blockchainRequest.initiator)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                              title="Click to view on Etherscan (opens in a new tab)"
+                              className="text-white text-sm font-mono hover:text-purple-300 transition-colors cursor-pointer"
                             >
-                              View on Etherscan
-                              <ExternalLink className="h-4 w-4" />
+                              {blockchainRequest.initiator}
                             </a>
+                          ) : (
+                            <p className="text-white text-sm font-mono">{blockchainRequest.initiator}</p>
                           )}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-start gap-3">
-                      <Link className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                      <div className="space-y-1 flex-1">
-                        <p className="text-white/70">Contract Address</p>
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-white break-all">{CONTRACT_ADDRESSES.REPAIR_REQUEST}</p>
-                          {getEtherscanLink('token', CONTRACT_ADDRESSES.REPAIR_REQUEST) && (
+                      <div className="flex items-start gap-3">
+                        <Link className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <p className="text-white/70">Contract Address</p>
+                          {getEtherscanLink('token', CONTRACT_ADDRESSES.REPAIR_REQUEST) ? (
                             <a
                               href={getEtherscanLink('token', CONTRACT_ADDRESSES.REPAIR_REQUEST)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                              title="Click to view on Etherscan (opens in a new tab)"
+                              className="text-white text-sm font-mono hover:text-purple-300 transition-colors cursor-pointer"
                             >
-                              View on Etherscan
-                              <ExternalLink className="h-4 w-4" />
+                              {CONTRACT_ADDRESSES.REPAIR_REQUEST}
                             </a>
+                          ) : (
+                            <p className="text-white text-sm font-mono">{CONTRACT_ADDRESSES.REPAIR_REQUEST}</p>
                           )}
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-start gap-3">
-                      <Link className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-white/70">Description Hash</p>
-                        <p className="text-white break-all">{blockchainRequest.descriptionHash}</p>
+                      <div className="flex items-start gap-3">
+                        <Link className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <p className="text-white/70">Description Hash</p>
+                          <p className="text-white text-sm font-mono">{blockchainRequest.descriptionHash}</p>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-start gap-3">
-                      <Calendar className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-white/70">Created On Chain</p>
-                        <p className="text-white">{formatTimestamp(blockchainRequest.createdAt)}</p>
-                      </div>
-                    </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-start gap-3">
+                          <Calendar className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-white/70">Created On Chain</p>
+                            <p className="text-white">{formatTimestamp(blockchainRequest.createdAt)}</p>
+                          </div>
+                        </div>
 
-                    <div className="flex items-start gap-3">
-                      <Clock className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                      <div>
-                        <p className="text-white/70">Last Updated On Chain</p>
-                        <p className="text-white">{formatTimestamp(blockchainRequest.updatedAt)}</p>
+                        <div className="flex items-start gap-3">
+                          <Clock className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-white/70">Last Updated On Chain</p>
+                            <p className="text-white">{formatTimestamp(blockchainRequest.updatedAt)}</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-3 pt-4 border-t border-purple-600/10">
                     <div className="flex items-center gap-2">
                       <History className="h-5 w-5 text-purple-400" />
                       <h3 className="text-white font-semibold">Event History</h3>
