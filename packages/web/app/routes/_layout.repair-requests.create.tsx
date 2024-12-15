@@ -62,7 +62,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const description = formData.get("description") as string;
   const urgency = formData.get("urgency") as string;
   const blockchainId = formData.get("blockchainId") as string;
-  const blockchainHash = formData.get("blockchainHash") as string;
+  const transactionHash = formData.get("transactionHash") as string;
 
   // Validate required fields
   const fields = { propertyId, description, urgency };
@@ -117,7 +117,7 @@ export async function action({ request }: ActionFunctionArgs) {
       });
     } else if (stage === 'create') {
       // Create the repair request in the database
-      if (!blockchainId || !blockchainHash) {
+      if (!blockchainId || !transactionHash) {
         return json<ActionData>(
           { 
             success: false, 
@@ -138,7 +138,7 @@ export async function action({ request }: ActionFunctionArgs) {
           propertyId: property.id,
           initiatorId: user.id,
           attachments: "",
-          hash: blockchainHash,
+          hash: transactionHash,
         },
       });
 
@@ -168,6 +168,7 @@ export default function CreateRepairRequest() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const isSubmitting = navigation.state === "submitting";
+  const [transactionHash, setTransactionHash] = useState<string>();
 
   // Watch for blockchain events
   useWatchRepairRequestEvents({
@@ -180,7 +181,7 @@ export default function CreateRepairRequest() {
           formData.append("description", actionData?.fields?.description || "");
           formData.append("urgency", actionData?.fields?.urgency || "");
           formData.append("blockchainId", id.toString());
-          formData.append("blockchainHash", descriptionHash);
+          formData.append("transactionHash", transactionHash || "");
           
           submit(formData, { method: "post" });
           setIsWaitingForEvent(false);
@@ -202,7 +203,8 @@ export default function CreateRepairRequest() {
         setBlockchainError(undefined);
         setIsWaitingForEvent(true);
         const { propertyId, description } = actionData.fields;
-        await createRepairRequest(propertyId, description);
+        const result = await createRepairRequest(propertyId, description);
+        setTransactionHash(result.hash);
       } catch (error) {
         console.error("Blockchain error:", error);
         setBlockchainError(

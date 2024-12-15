@@ -1,9 +1,15 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData, useNavigate } from "@remix-run/react";
 import { useAccount } from "wagmi";
 import { db } from "~/utils/db.server";
-import { useRepairRequest } from "~/utils/blockchain/hooks/useRepairRequest";
-import { RepairRequestStatusType } from "~/utils/blockchain/config";
+import { useRepairRequest, useRepairRequestRead, useWatchRepairRequestEvents } from "~/utils/blockchain/hooks/useRepairRequest";
+import { RepairRequestStatusType, CONTRACT_ADDRESSES } from "~/utils/blockchain/config";
+import { Card, CardHeader, CardContent, CardFooter } from "~/components/ui/Card";
+import { Badge } from "~/components/ui/Badge";
+import { Select } from "~/components/ui/Select";
+import { Button } from "~/components/ui/Button";
+import { ArrowLeft, Building2, User, Calendar, Clock, Hash, Link, History, ExternalLink } from 'lucide-react';
+import { useEffect, useState, useCallback } from "react";
 
 type LoaderData = {
   repairRequest: {
@@ -32,6 +38,16 @@ type LoaderData = {
   };
   userRole?: string;
   canUpdateStatus: boolean;
+};
+
+type BlockchainEvent = {
+  type: 'created' | 'updated' | 'hashUpdated';
+  timestamp: bigint;
+  data: {
+    status?: RepairRequestStatusType;
+    oldHash?: string;
+    newHash?: string;
+  };
 };
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
@@ -71,7 +87,6 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  // Get user's role if address is provided
   let userRole;
   let canUpdateStatus = false;
   
@@ -82,10 +97,9 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     });
     userRole = user?.role;
 
-    // Determine if user can update status
     canUpdateStatus = 
-      userAddress === repairRequest.property.landlord.address.toLowerCase() || // Landlord
-      userAddress === repairRequest.initiator.address.toLowerCase(); // Initiator
+      userAddress === repairRequest.property.landlord.address.toLowerCase() ||
+      userAddress === repairRequest.initiator.address.toLowerCase();
   }
 
   return json<LoaderData>({
@@ -100,14 +114,58 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 }
 
 export default function RepairRequestDetails() {
+  const navigate = useNavigate();
   const { address } = useAccount();
   const { repairRequest, canUpdateStatus } = useLoaderData<typeof loader>();
   const { updateStatus, isPending } = useRepairRequest();
+  const [events, setEvents] = useState<BlockchainEvent[]>([]);
+
+  // Get blockchain data
+  const { repairRequest: blockchainRequest, isLoading } = useRepairRequestRead(BigInt(repairRequest.id));
+
+  // Create a stable callback for event handling
+  const handleEvent = useCallback((type: BlockchainEvent['type'], timestamp: bigint, data = {}) => {
+    setEvents(prev => {
+      // Check if this exact event already exists
+      const exists = prev.some(e => 
+        e.type === type && 
+        e.timestamp === timestamp &&
+        JSON.stringify(e.data) === JSON.stringify(data)
+      );
+      
+      if (exists) return prev;
+      
+      return [...prev, { type, timestamp, data }];
+    });
+  }, []);
+
+  // Watch for blockchain events
+  useWatchRepairRequestEvents({
+    onCreated: (id, initiator, propertyId, descriptionHash, createdAt) => {
+      if (id.toString() === repairRequest.id) {
+        handleEvent('created', createdAt);
+      }
+    },
+    onUpdated: (id, status, updatedAt) => {
+      if (id.toString() === repairRequest.id) {
+        handleEvent('updated', updatedAt, { status });
+      }
+    },
+    onDescriptionHashUpdated: (id, oldHash, newHash, updatedAt) => {
+      if (id.toString() === repairRequest.id) {
+        handleEvent('hashUpdated', updatedAt, { oldHash, newHash });
+      }
+    }
+  });
+
+  // Clear events when repair request ID changes
+  useEffect(() => {
+    setEvents([]);
+  }, [repairRequest.id]);
 
   const handleStatusUpdate = async (newStatus: RepairRequestStatusType) => {
     try {
       await updateStatus(BigInt(repairRequest.id), newStatus);
-      // Refresh the page to show updated status
       window.location.reload();
     } catch (error) {
       console.error('Error updating status:', error);
@@ -122,99 +180,267 @@ export default function RepairRequestDetails() {
     { value: RepairRequestStatusType.CANCELLED, label: 'Cancelled' },
   ];
 
+  const formatTimestamp = (timestamp: bigint) => {
+    return new Date(Number(timestamp) * 1000).toLocaleString();
+  };
+
+  const getEtherscanLink = (type: 'tx' | 'address' | 'token', value: string): string | undefined => {
+    // Only create link if value is a valid hex string starting with 0x
+    if (!/^0x[a-fA-F0-9]+$/.test(value)) {
+      return undefined;
+    }
+    return `https://sepolia.etherscan.io/${type}/${value}`;
+  };
+
   return (
-    <div>
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h1 className="text-2xl font-bold">Repair Request Details</h1>
+    <div className="space-y-8">
+      <div className="flex items-center gap-4">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate('/repair-requests')}
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h1 className="text-3xl font-bold text-white">
+            Repair Request Details
+          </h1>
+          <p className="mt-2 text-lg text-white/70">
+            View and manage repair request information
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-6">
+          <Card className="bg-purple-600/5">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white flex items-center gap-3">
+                  Description
+                  <Badge variant={
+                    repairRequest.urgency === "HIGH" ? "danger" :
+                    repairRequest.urgency === "MEDIUM" ? "warning" :
+                    "default"
+                  }>
+                    {repairRequest.urgency} Priority
+                  </Badge>
+                </h2>
+                <Badge variant={
+                  repairRequest.status === "PENDING" ? "warning" :
+                  repairRequest.status === "IN_PROGRESS" ? "primary" :
+                  repairRequest.status === "COMPLETED" ? "success" :
+                  "default"
+                }>
+                  {repairRequest.status.replace('_', ' ')}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <p className="text-white/70">{repairRequest.description}</p>
+            </CardContent>
+            {address && canUpdateStatus && (
+              <CardFooter className="border-t border-purple-600/10">
+                <Select
+                  value=""
+                  onChange={(e) => handleStatusUpdate(Number(e.target.value))}
+                  disabled={isPending}
+                >
+                  <option value="">Update status...</option>
+                  {statusOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+              </CardFooter>
+            )}
+          </Card>
+
+          <Card className="bg-purple-600/5">
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-white">Blockchain Information</h2>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {isLoading ? (
+                <p className="text-white/70">Loading blockchain data...</p>
+              ) : blockchainRequest ? (
+                <>
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3">
+                      <Hash className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1 flex-1">
+                        <p className="text-white/70">Transaction Hash</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-white break-all">{repairRequest.hash}</p>
+                          {getEtherscanLink('tx', repairRequest.hash) && (
+                            <a
+                              href={getEtherscanLink('tx', repairRequest.hash)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                            >
+                              View on Etherscan
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-start gap-3">
+                      <User className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1 flex-1">
+                        <p className="text-white/70">Initiator Address</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-white break-all">{blockchainRequest.initiator}</p>
+                          {getEtherscanLink('address', blockchainRequest.initiator) && (
+                            <a
+                              href={getEtherscanLink('address', blockchainRequest.initiator)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                            >
+                              View on Etherscan
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Link className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1 flex-1">
+                        <p className="text-white/70">Contract Address</p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-white break-all">{CONTRACT_ADDRESSES.REPAIR_REQUEST}</p>
+                          {getEtherscanLink('token', CONTRACT_ADDRESSES.REPAIR_REQUEST) && (
+                            <a
+                              href={getEtherscanLink('token', CONTRACT_ADDRESSES.REPAIR_REQUEST)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                            >
+                              View on Etherscan
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Link className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-white/70">Description Hash</p>
+                        <p className="text-white break-all">{blockchainRequest.descriptionHash}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Calendar className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-white/70">Created On Chain</p>
+                        <p className="text-white">{formatTimestamp(blockchainRequest.createdAt)}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Clock className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-white/70">Last Updated On Chain</p>
+                        <p className="text-white">{formatTimestamp(blockchainRequest.updatedAt)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <History className="h-5 w-5 text-purple-400" />
+                      <h3 className="text-white font-semibold">Event History</h3>
+                    </div>
+                    <div className="space-y-2">
+                      {events.length > 0 ? (
+                        events
+                          .sort((a, b) => Number(b.timestamp - a.timestamp))
+                          .map((event, index) => (
+                            <div key={index} className="text-white/70 text-sm">
+                              {formatTimestamp(event.timestamp)} -{' '}
+                              {event.type === 'created' && 'Request created on chain'}
+                              {event.type === 'updated' && `Status updated to ${RepairRequestStatusType[event.data.status!]}`}
+                              {event.type === 'hashUpdated' && 'Description hash updated'}
+                            </div>
+                          ))
+                      ) : (
+                        <p className="text-white/70 text-sm">No events recorded yet</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-white/70">No blockchain data available</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
-        <div className="px-6 py-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <h2 className="text-lg font-semibold mb-4">Property Information</h2>
-              <p className="text-gray-600">Address: {repairRequest.property.address}</p>
-              <p className="text-gray-600">
-                Landlord: {repairRequest.property.landlord.name}
-              </p>
-            </div>
-
-            <div>
-              <h2 className="text-lg font-semibold mb-4">Request Information</h2>
-              <p className="text-gray-600">
-                Submitted by: {repairRequest.initiator.name}
-              </p>
-              <p className="text-gray-600">
-                Created: {new Date(repairRequest.createdAt).toLocaleDateString()}
-              </p>
-              <p className="text-gray-600">
-                Last Updated: {new Date(repairRequest.updatedAt).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-6">
-            <h2 className="text-lg font-semibold mb-4">Description</h2>
-            <p className="text-gray-600">{repairRequest.description}</p>
-          </div>
-
-          <div className="mt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Status</h2>
-                <span className={`inline-block px-2 py-1 rounded text-sm mt-2 ${
-                  repairRequest.status === "PENDING" ? "bg-yellow-100 text-yellow-800" :
-                  repairRequest.status === "IN_PROGRESS" ? "bg-blue-100 text-blue-800" :
-                  repairRequest.status === "COMPLETED" ? "bg-green-100 text-green-800" :
-                  "bg-gray-100 text-gray-800"
-                }`}>
-                  {repairRequest.status}
-                </span>
-              </div>
-
-              {address && canUpdateStatus && (
-                <div className="flex items-center gap-2">
-                  <select
-                    className="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                    onChange={(e) => handleStatusUpdate(Number(e.target.value))}
-                    disabled={isPending}
-                  >
-                    <option value="">Update Status</option>
-                    {statusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+        <div className="space-y-6">
+          <Card className="bg-purple-600/5">
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-white">Property Details</h2>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start gap-3">
+                <Building2 className="h-5 w-5 text-purple-400 mt-0.5" />
+                <div>
+                  <p className="text-white/70">Address</p>
+                  <p className="text-white">{repairRequest.property.address}</p>
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <User className="h-5 w-5 text-purple-400 mt-0.5" />
+                <div>
+                  <p className="text-white/70">Landlord</p>
+                  <p className="text-white">{repairRequest.property.landlord.name}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-          <div className="mt-6">
-            <h2 className="text-lg font-semibold mb-4">Priority</h2>
-            <span className={`inline-block px-2 py-1 rounded text-sm ${
-              repairRequest.urgency === "HIGH" ? "bg-red-100 text-red-800" :
-              repairRequest.urgency === "MEDIUM" ? "bg-yellow-100 text-yellow-800" :
-              "bg-green-100 text-green-800"
-            }`}>
-              {repairRequest.urgency} Priority
-            </span>
-          </div>
-
-          {repairRequest.attachments && (
-            <div className="mt-6">
-              <h2 className="text-lg font-semibold mb-4">Attachments</h2>
-              <p className="text-gray-600">{repairRequest.attachments}</p>
-            </div>
-          )}
-
-          <div className="mt-6">
-            <h2 className="text-lg font-semibold mb-4">Blockchain Information</h2>
-            <p className="text-gray-600 break-all">
-              Transaction Hash: {repairRequest.hash}
-            </p>
-          </div>
+          <Card className="bg-purple-600/5">
+            <CardHeader>
+              <h2 className="text-lg font-semibold text-white">Request Details</h2>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-start gap-3">
+                <User className="h-5 w-5 text-purple-400 mt-0.5" />
+                <div>
+                  <p className="text-white/70">Submitted by</p>
+                  <p className="text-white">{repairRequest.initiator.name}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Calendar className="h-5 w-5 text-purple-400 mt-0.5" />
+                <div>
+                  <p className="text-white/70">Created</p>
+                  <p className="text-white">
+                    {new Date(repairRequest.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-purple-400 mt-0.5" />
+                <div>
+                  <p className="text-white/70">Last Updated</p>
+                  <p className="text-white">
+                    {new Date(repairRequest.updatedAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
