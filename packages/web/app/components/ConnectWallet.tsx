@@ -1,53 +1,24 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { Wallet2, ChevronDown, ExternalLink } from 'lucide-react'
-import { useNavigate, useFetcher } from '@remix-run/react'
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useAccount } from 'wagmi'
 
 interface ConnectWalletProps {
   onConnect?: () => void
 }
 
-type LoaderData = {
-  repairRequests: Array<{
-    id: string;
-    description: string;
-    urgency: string;
-    status: string;
-    propertyId: string;
-    property: {
-      address: string;
-    };
-    initiator: {
-      name: string;
-      address: string;
-    };
-  }>;
-  userRole?: string;
-};
-
 export function ConnectWallet({ onConnect }: ConnectWalletProps) {
-  const navigate = useNavigate()
-  const { address } = useAccount()
-  const fetcher = useFetcher<LoaderData>()
-  const hasCheckedRef = useRef(false)
+  const { address, isConnected } = useAccount()
 
+  // Update URL with wallet address when it changes
   useEffect(() => {
-    if (address && !hasCheckedRef.current && !fetcher.data) {
-      hasCheckedRef.current = true
-      fetcher.load(`/repair-requests?address=${address}`)
+    if (address && typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('address', address.toLowerCase());
+      window.history.replaceState({}, '', url.toString());
+      onConnect?.();
     }
-  }, [address, fetcher])
-
-  useEffect(() => {
-    if (fetcher.data) {
-      if (!fetcher.data.userRole) {
-        navigate('/register')
-      } else {
-        navigate('/repair-requests')
-      }
-    }
-  }, [fetcher.data, navigate])
+  }, [address, onConnect]);
 
   return (
     <ConnectButton.Custom>

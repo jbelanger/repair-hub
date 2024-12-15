@@ -1,142 +1,133 @@
-import { Button } from "~/components/ui/Button";
-import { ArrowRight, Shield, Bell, Zap, Sparkles, ChevronRight } from 'lucide-react';
+import { useAccount } from "wagmi";
+import { ClipboardList, Home, Wrench } from "lucide-react";
+import { LinkButton } from "~/components/ui/LinkButton";
+import { json, type LoaderFunctionArgs } from "@remix-run/node";
+import { useLoaderData } from "@remix-run/react";
+import { getUserFromSession } from "~/utils/session.server";
+
+type LoaderData = {
+  user: {
+    id: string;
+    address: string;
+    role: string;
+    name: string;
+  } | null;
+};
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const user = await getUserFromSession(request);
+  return json<LoaderData>({ user });
+}
 
 export default function Index() {
+  const { address } = useAccount();
+  const { user } = useLoaderData<typeof loader>();
+
   return (
-    <div className="space-y-16">
-      {/* Hero Section */}
-      <div className="space-y-6">
-        <h1 className="text-5xl font-bold tracking-tight text-white">
-          Welcome to{" "}
-          <span className="bg-gradient-to-r from-purple-300 via-accent-purple to-accent-pink bg-clip-text text-transparent animate-gradient">
-            RepairHub
-          </span>
-        </h1>
-        <p className="text-xl text-white/70 max-w-2xl">
-          A decentralized platform for managing property repairs and maintenance.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-4 pt-4">
-          <Button
-            variant="primary"
-            size="lg"
-            rightIcon={<ArrowRight className="h-5 w-5" />}
-            onClick={() => window.location.href = '/repair-requests'}
-          >
-            View Repair Requests
-          </Button>
-          <Button
-            variant="secondary"
-            size="lg"
-            onClick={() => window.location.href = '/register'}
-          >
-            Register as User
-          </Button>
+    <div className="flex flex-col items-center justify-center min-h-[80vh] text-center px-4">
+      <div className="flex gap-4 mb-8">
+        <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+          <Home className="h-6 w-6 text-purple-400" />
+        </div>
+        <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+          <Wrench className="h-6 w-6 text-purple-400" />
+        </div>
+        <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center">
+          <ClipboardList className="h-6 w-6 text-purple-400" />
         </div>
       </div>
 
-      {/* Feature Grid */}
-      <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-        {/* Feature 1 */}
-        <div className="group relative rounded-2xl border border-white/[0.04] bg-gradient-to-br from-purple-500/5 to-transparent p-8 hover:bg-white/[0.02] transition-all duration-300">
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity blur-xl" />
-          <div className="relative space-y-4">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.03] text-white ring-1 ring-white/[0.1]">
-              <Shield className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-semibold text-white">
-              Decentralized Management
-            </h3>
-            <p className="text-white/70">
-              Securely manage repair requests using blockchain technology.
-            </p>
-            <Button variant="ghost" rightIcon={<ChevronRight className="h-4 w-4" />}>
-              Learn more
-            </Button>
-          </div>
-        </div>
+      <h1 className="text-4xl font-bold text-white mb-4">
+        Welcome to RepairHub
+      </h1>
+      
+      <p className="text-xl text-white/70 mb-8 max-w-2xl">
+        The decentralized platform for managing property repairs and maintenance. Connect your wallet to get started.
+      </p>
 
-        {/* Feature 2 */}
-        <div className="group relative rounded-2xl border border-white/[0.04] bg-gradient-to-br from-blue-500/5 to-transparent p-8 hover:bg-white/[0.02] transition-all duration-300">
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity blur-xl" />
-          <div className="relative space-y-4">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.03] text-white ring-1 ring-white/[0.1]">
-              <Bell className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-semibold text-white">
-              Real-time Updates
-            </h3>
-            <p className="text-white/70">
-              Track repair status and receive instant notifications.
-            </p>
-            <Button variant="blue" rightIcon={<ChevronRight className="h-4 w-4" />}>
-              Subscribe
-            </Button>
-          </div>
-        </div>
-
-        {/* Feature 3 */}
-        <div className="group relative rounded-2xl border border-white/[0.04] bg-gradient-to-br from-pink-500/5 to-transparent p-8 hover:bg-white/[0.02] transition-all duration-300">
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-pink-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity blur-xl" />
-          <div className="relative space-y-4">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.03] text-white ring-1 ring-white/[0.1]">
-              <Zap className="h-6 w-6" />
-            </div>
-            <h3 className="text-xl font-semibold text-white">
-              Smart Contracts
-            </h3>
-            <p className="text-white/70">
-              Automated payments and agreements through smart contracts.
-            </p>
-            <Button variant="dark" rightIcon={<ChevronRight className="h-4 w-4" />}>
-              Subscribe
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Subscription Section */}
-      <div className="relative rounded-2xl border border-white/[0.04] overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 via-blue-500/10 to-pink-500/10" />
-        <div className="relative p-8 sm:p-10 lg:p-12">
-          <div className="flex items-center gap-3 mb-6">
-            <Sparkles className="h-6 w-6 text-purple-400" />
-            <h2 className="text-2xl font-semibold text-white">Premium Features</h2>
-          </div>
-          
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Button variant="primary">Subscribe</Button>
-            <Button variant="secondary">Subscribe</Button>
-            <Button variant="dark">Subscribe</Button>
-            <Button variant="blue">Subscribe</Button>
-          </div>
-        </div>
-      </div>
-
-      {/* CTA Section */}
-      <div className="relative rounded-2xl border border-white/[0.04] bg-gradient-to-br from-purple-500/5 via-pink-500/5 to-blue-500/5 p-8 sm:p-10 lg:p-12">
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-500/10 via-pink-500/10 to-blue-500/10 opacity-0 hover:opacity-100 transition-opacity blur-2xl" />
-        <div className="relative">
-          <h2 className="text-2xl font-semibold text-white sm:text-3xl">Ready to get started?</h2>
-          <p className="mt-3 max-w-2xl text-lg text-white/70">
-            Create your first repair request and experience seamless property maintenance.
+      {!address ? (
+        <div className="space-y-4">
+          <p className="text-purple-300/70">
+            Connect your wallet to access the platform
           </p>
-          <div className="mt-8 flex gap-4">
-            <Button
+        </div>
+      ) : !user ? (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <LinkButton
+              to="/register"
               variant="primary"
               size="lg"
-              rightIcon={<ArrowRight className="h-5 w-5" />}
-              onClick={() => window.location.href = '/repair-requests/create'}
+              leftIcon={<ClipboardList className="h-5 w-5" />}
             >
-              Create Your First Request
-            </Button>
-            <Button
+              Register Now
+            </LinkButton>
+          </div>
+          <p className="text-purple-300/70">
+            Create an account to start managing repairs
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <LinkButton
+              to="/repair-requests"
+              variant="primary"
+              size="lg"
+              leftIcon={<ClipboardList className="h-5 w-5" />}
+            >
+              View Repair Requests
+            </LinkButton>
+            <LinkButton
+              to="/repair-requests/create"
               variant="secondary"
               size="lg"
-              onClick={() => window.location.href = '/repair-requests'}
+              leftIcon={<Wrench className="h-5 w-5" />}
             >
-              Browse Requests
-            </Button>
+              Submit New Request
+            </LinkButton>
           </div>
+          <p className="text-purple-300/70">
+            Manage your property repairs and maintenance in one place
+          </p>
+        </div>
+      )}
+
+      <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-8 max-w-4xl mx-auto text-left">
+        <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-6">
+          <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
+            <Home className="h-6 w-6 text-purple-400" />
+          </div>
+          <h3 className="text-lg font-medium text-purple-300 mb-2">
+            Property Management
+          </h3>
+          <p className="text-purple-300/70">
+            Easily manage repairs and maintenance for your properties or submit requests as a tenant.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-6">
+          <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
+            <Wrench className="h-6 w-6 text-purple-400" />
+          </div>
+          <h3 className="text-lg font-medium text-purple-300 mb-2">
+            Smart Contracts
+          </h3>
+          <p className="text-purple-300/70">
+            All repair requests and work orders are secured on the blockchain for transparency and trust.
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-6">
+          <div className="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center mb-4">
+            <ClipboardList className="h-6 w-6 text-purple-400" />
+          </div>
+          <h3 className="text-lg font-medium text-purple-300 mb-2">
+            Track Progress
+          </h3>
+          <p className="text-purple-300/70">
+            Real-time updates on repair requests, from submission to completion.
+          </p>
         </div>
       </div>
     </div>
