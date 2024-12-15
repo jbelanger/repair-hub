@@ -4,10 +4,12 @@ import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from
 import { Button } from "~/components/ui/Button";
 import { Input } from "~/components/ui/Input";
 import { Card } from "~/components/ui/Card";
-import { X, User, Mail, Phone, Check } from "lucide-react";
+import { Select } from "~/components/ui/Select";
+import { X, User, Mail, Phone, Check, Home } from "lucide-react";
 import { db } from "~/utils/db.server";
 import { getUserFromSession } from "~/utils/session.server";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
+import type { Prisma } from "@prisma/client";
 
 type ActionData = { success: true } | { error: string };
 type LoaderData = {
@@ -17,7 +19,39 @@ type LoaderData = {
     phone: string | null;
     role: string;
   };
+  properties: {
+    id: string;
+    address: string;
+    isLandlord: boolean;
+  }[];
+  currentPropertyId: string | null;
 };
+
+type UserWithProperties = Prisma.UserGetPayload<{
+  select: {
+    name: true;
+    email: true;
+    phone: true;
+    role: true;
+    currentProperty: {
+      select: {
+        id: true;
+      };
+    };
+    properties: {
+      select: {
+        id: true;
+        address: true;
+      };
+    };
+    tenancies: {
+      select: {
+        id: true;
+        address: true;
+      };
+    };
+  };
+}>;
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await getUserFromSession(request);
@@ -32,14 +66,46 @@ export async function loader({ request }: LoaderFunctionArgs) {
       email: true,
       phone: true,
       role: true,
+      currentProperty: {
+        select: {
+          id: true,
+        },
+      },
+      properties: {
+        select: {
+          id: true,
+          address: true,
+        },
+      },
+      tenancies: {
+        select: {
+          id: true,
+          address: true,
+        },
+      },
     },
-  });
+  }) as UserWithProperties | null;
 
   if (!userData) {
     throw new Response("User not found", { status: 404 });
   }
 
-  return json<LoaderData>({ user: userData });
+  // Combine and format properties
+  const properties = [
+    ...userData.properties.map(p => ({ ...p, isLandlord: true })),
+    ...userData.tenancies.map(p => ({ ...p, isLandlord: false }))
+  ];
+
+  return json<LoaderData>({ 
+    user: {
+      name: userData.name,
+      email: userData.email,
+      phone: userData.phone,
+      role: userData.role,
+    },
+    properties,
+    currentPropertyId: userData.currentProperty?.id ?? null
+  });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -52,6 +118,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const name = formData.get("name") as string;
   const email = formData.get("email") as string;
   const phone = formData.get("phone") as string;
+  const propertyId = formData.get("propertyId") as string;
 
   // Validate required fields
   if (!name?.trim()) {
@@ -59,6 +126,9 @@ export async function action({ request }: ActionFunctionArgs) {
   }
   if (!email?.trim()) {
     return json<ActionData>({ error: "Email is required" }, { status: 400 });
+  }
+  if (!propertyId?.trim()) {
+    return json<ActionData>({ error: "Property is required" }, { status: 400 });
   }
 
   try {
@@ -75,6 +145,24 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
+    // Verify the property exists and user has access to it
+    const property = await db.property.findFirst({
+      where: {
+        id: propertyId,
+        OR: [
+          { landlordId: user.id },
+          { tenants: { some: { id: user.id } } }
+        ]
+      }
+    });
+
+    if (!property) {
+      return json<ActionData>(
+        { error: "Invalid property selection" },
+        { status: 400 }
+      );
+    }
+
     // Update user profile
     await db.user.update({
       where: { id: user.id },
@@ -82,6 +170,11 @@ export async function action({ request }: ActionFunctionArgs) {
         name: name.trim(),
         email: email.trim(),
         phone: phone?.trim() || null,
+        currentProperty: {
+          connect: {
+            id: propertyId
+          }
+        }
       },
     });
 
@@ -117,7 +210,7 @@ export default function ProfileSettings() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const actionData = useActionData<typeof action>();
-  const { user } = useLoaderData<typeof loader>();
+  const { user, properties, currentPropertyId } = useLoaderData<typeof loader>();
   const [showSuccess, setShowSuccess] = useState(false);
   
   const isSubmitting = navigation.state === "submitting";
@@ -203,6 +296,28 @@ export default function ProfileSettings() {
                   leftIcon={<Phone className="h-5 w-5" />}
                   disabled={isSubmitting}
                 />
+              </div>
+
+              <div>
+                <label htmlFor="propertyId" className="mb-2 block text-sm">
+                  Current Property
+                </label>
+                <Select
+                  id="propertyId"
+                  name="propertyId"
+                  defaultValue={currentPropertyId || undefined}
+                  required
+                  className="bg-white/[0.04] focus:bg-white/[0.08]"
+                  leftIcon={<Home className="h-5 w-5" />}
+                  disabled={isSubmitting}
+                >
+                  <option value="">Select a property</option>
+                  {properties.map((property) => (
+                    <option key={property.id} value={property.id}>
+                      {property.address} ({property.isLandlord ? 'Owner' : 'Tenant'})
+                    </option>
+                  ))}
+                </Select>
               </div>
 
               <div>

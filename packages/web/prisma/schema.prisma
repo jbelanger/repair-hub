@@ -11,14 +11,17 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  role      String // "TENANT", "LANDLORD", "ADMIN"
-  phone     String?
-  address   String   @unique // Ethereum address
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  role             String // "TENANT", "LANDLORD", "ADMIN"
+  phone            String?
+  address          String   @unique // Ethereum address
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  // Current property the user is associated with
+  currentProperty  Property? @relation("CurrentProperty", fields: [currentPropertyId], references: [id])
+  currentPropertyId String?
 
   // Properties owned by this user (if they're a landlord)
   properties        Property[]      @relation("LandlordProperties")
@@ -36,6 +39,8 @@ model Property {
   landlordId String
   // Tenants living in this property
   tenants    User[]          @relation("TenantProperties")
+  // Users who have this as their current property
+  currentUsers User[]        @relation("CurrentProperty")
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
   // Repair requests for this property
