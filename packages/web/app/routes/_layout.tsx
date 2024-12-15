@@ -1,5 +1,5 @@
 import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
-import { Link, Outlet, useLoaderData, useLocation } from "@remix-run/react";
+import { Link, Outlet, useLoaderData, useLocation, useNavigate } from "@remix-run/react";
 import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
@@ -24,10 +24,12 @@ type LoaderData = {
     address: string;
     role: string;
     name: string;
+    email: string;
+    phone: string | null;
   } | null;
 };
 
-export async function loader({ request }: LoaderFunctionArgs) {
+export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
   const walletAddress = url.searchParams.get("address")?.toLowerCase();
   const isRegisterPage = url.pathname === "/register";
@@ -37,7 +39,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
   
   // If we have a session user, use that
   if (sessionUser) {
-    return json<LoaderData>({ user: sessionUser });
+    // Get full user data including email and phone
+    const user = await db.user.findUnique({
+      where: { id: sessionUser.id },
+      select: { 
+        id: true,
+        address: true,
+        role: true,
+        name: true,
+        email: true,
+        phone: true,
+      },
+    });
+    return json<LoaderData>({ user });
   }
   
   // If we have a wallet address and we're not on the register page
@@ -50,6 +64,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
         address: true,
         role: true,
         name: true,
+        email: true,
+        phone: true,
       },
     });
 
@@ -71,11 +87,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   return json<LoaderData>({ user: null });
-}
+};
 
 export default function Layout() {
   const { user } = useLoaderData<typeof loader>();
   const location = useLocation();
+  const navigate = useNavigate();
 
   return (
     <WagmiProvider config={config}>
@@ -127,6 +144,7 @@ export default function Layout() {
                           variant="ghost" 
                           size="icon"
                           className="hover:bg-white/[0.02]"
+                          onClick={() => navigate("/profile-settings")}
                         >
                           <Settings className="h-5 w-5" />
                         </Button>
