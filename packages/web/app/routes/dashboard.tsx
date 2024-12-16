@@ -7,7 +7,6 @@ import { Search } from "~/components/ui/Search";
 import { Settings } from "lucide-react";
 import { Sidebar } from "~/components/ui/Sidebar";
 import { db } from "~/utils/db.server";
-import { Logo } from "~/components/Logo";
 import { Notifications } from "~/components/Notifications";
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -137,12 +136,8 @@ export default function AppLayout() {
           backgroundColor: 'var(--card-bg)',
           borderBottom: '1px solid var(--card-border)'
         }}>
-          {/* Left: Logo and App Name */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              <Logo logoSrc="/logo5.svg" size="xl" className="py-1" />
-            </div>
-          </div>
+          {/* Left: Empty space for alignment */}
+          <div className="w-[var(--sidebar-width)]"></div>
 
           {/* Center: Search */}
           <div className="flex-1 max-w-xl mx-4">

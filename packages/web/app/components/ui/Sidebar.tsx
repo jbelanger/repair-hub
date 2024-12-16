@@ -15,6 +15,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "~/context/ThemeContext";
+import { Logo } from "~/components/Logo";
 
 interface SidebarProps {
   user: {
@@ -104,7 +105,7 @@ export function Sidebar({ user, counts }: SidebarProps) {
   return (
     <div
       className={cn(
-        "flex flex-col h-screen transition-all duration-300 backdrop-blur-[var(--backdrop-blur)]",
+        "flex flex-col h-[calc(100vh-4rem)] mt-16 transition-all duration-300 backdrop-blur-[var(--backdrop-blur)]",
         collapsed ? "w-[var(--sidebar-width-collapsed)]" : "w-[var(--sidebar-width)]"
       )}
       style={{
@@ -115,12 +116,14 @@ export function Sidebar({ user, counts }: SidebarProps) {
     >
       {/* Logo and App Name */}
       <div className="flex items-center justify-between p-4">
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <img src="/logo3.png" alt="Logo" className="h-8" />
-            <span className="text-xl font-bold">RepairHub</span>
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          <Logo logoSrc="/logo5.svg" size={collapsed ? "md" : "lg"} showText={false} className="py-1" />
+          {!collapsed && (
+            <span className="text-xl font-bold tracking-tight text-white/90">
+              RepairHub
+            </span>
+          )}
+        </div>
         <button
           onClick={() => setCollapsed(!collapsed)}
           className="p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)]"
