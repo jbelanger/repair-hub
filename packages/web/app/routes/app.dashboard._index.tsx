@@ -1,445 +1,266 @@
-import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
+import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
-import { Card } from "~/components/ui/Card";
+import { Building2, Wrench, Users, TrendingUp } from "lucide-react";
+import { DashboardCard } from "~/components/ui/DashboardCard";
+import { BarChart } from "~/components/ui/BarChart";
 import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
-import type { PrismaClient, RepairRequest, PropertyTenant, Prisma } from "@prisma/client";
 
-type RepairWithDetails = RepairRequest & {
-  property: { address: string };
-  initiator: { name: string };
-};
+interface Metric {
+  count: number;
+  change: number;
+}
 
-type LeaseWithDetails = PropertyTenant & {
-  property: { 
-    address: string;
-    landlord: {
-      name: string;
-      email: string;
-    };
-  };
-};
+interface RepairTrend {
+  label: string;
+  value: number;
+  color: string;
+}
 
-type LandlordStats = {
-  type: 'landlord';
-  propertiesCount: number;
-  activeTenantsCount: number;
-  activeRepairsCount: number;
-  subscription: {
-    plan: { name: string };
-    status: string;
-  } | null;
-  recentRepairs: RepairWithDetails[];
-  recentInvitations: {
-    id: string;
-    property: { address: string };
-    email: string;
-    startDate: Date;
-    endDate: Date;
-    status: string;
-  }[];
-  repairsByStatus: {
-    status: string;
-    _count: number;
-  }[];
-};
+interface LandlordStats {
+  properties: Metric;
+  tenants: Metric;
+  repairs: Metric;
+  repairTrends: RepairTrend[];
+}
 
-type TenantStats = {
-  type: 'tenant';
-  activeLeases: LeaseWithDetails[];
-  activeRepairsCount: number;
-  pendingRepairsCount: number;
-  recentRepairs: RepairWithDetails[];
-  repairsByStatus: {
-    status: string;
-    _count: number;
-  }[];
-};
+interface TenantStats {
+  repairs: Metric;
+  repairTrends: RepairTrend[];
+}
 
 type LoaderData = {
   stats: LandlordStats | TenantStats;
 };
 
-type TransactionClient = Omit<
-  PrismaClient,
-  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
->;
+function isLandlordStats(stats: LandlordStats | TenantStats): stats is LandlordStats {
+  return 'properties' in stats;
+}
+
+async function getMonthOverMonthChange(
+  currentCount: number,
+  userId: string,
+  type: 'properties' | 'repairs' | 'tenants'
+) {
+  const lastMonth = new Date();
+  lastMonth.setMonth(lastMonth.getMonth() - 1);
+
+  let previousCount = 0;
+
+  switch (type) {
+    case 'properties':
+      previousCount = await db.property.count({
+        where: {
+          landlordId: userId,
+          createdAt: {
+            lt: lastMonth
+          }
+        }
+      });
+      break;
+    case 'repairs':
+      previousCount = await db.repairRequest.count({
+        where: {
+          property: { landlordId: userId },
+          createdAt: {
+            lt: lastMonth
+          }
+        }
+      });
+      break;
+    case 'tenants':
+      previousCount = await db.propertyTenant.count({
+        where: {
+          property: { landlordId: userId },
+          createdAt: {
+            lt: lastMonth
+          }
+        }
+      });
+      break;
+  }
+
+  if (previousCount === 0) return 0;
+  return ((currentCount - previousCount) / previousCount) * 100;
+}
+
+async function getRepairTrends(userId: string, role: string) {
+  const now = new Date();
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = new Date();
+    d.setMonth(now.getMonth() - i);
+    return d;
+  }).reverse();
+
+  const trends = await Promise.all(
+    months.map(async (month) => {
+      const startOfMonth = new Date(month.getFullYear(), month.getMonth(), 1);
+      const endOfMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+
+      const count = await db.repairRequest.count({
+        where: {
+          ...(role === "LANDLORD"
+            ? { property: { landlordId: userId } }
+            : { initiatorId: userId }),
+          createdAt: {
+            gte: startOfMonth,
+            lte: endOfMonth,
+          },
+        },
+      });
+
+      return {
+        label: month.toLocaleDateString('en-US', { month: 'short' }),
+        value: count,
+        color: 'var(--color-chart-1)'
+      };
+    })
+  );
+
+  return trends;
+}
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
 
   if (user.role === "LANDLORD") {
-    // Get landlord stats
-    const stats = await db.$transaction(async (tx: TransactionClient) => {
-      const propertiesCount = await tx.property.count({
+    const [
+      propertiesCount,
+      activeTenantsCount,
+      activeRepairsCount,
+      repairTrends
+    ] = await Promise.all([
+      db.property.count({
         where: { landlordId: user.id }
-      });
-      
-      const activeTenantsCount = await tx.propertyTenant.count({
-        where: { 
+      }),
+      db.propertyTenant.count({
+        where: {
           property: { landlordId: user.id },
-          status: "ACTIVE" 
+          status: "ACTIVE"
         }
-      });
-      
-      const activeRepairsCount = await tx.repairRequest.count({
+      }),
+      db.repairRequest.count({
         where: {
           property: { landlordId: user.id },
           status: {
-            in: ["PENDING", "IN_PROGRESS"],
-          },
-        },
-      });
-      
-      const subscription = await tx.subscription.findFirst({
-        where: { userId: user.id },
-        include: { plan: true },
-      });
+            in: ["PENDING", "IN_PROGRESS"]
+          }
+        }
+      }),
+      getRepairTrends(user.id, user.role)
+    ]);
 
-      const recentRepairs = await tx.repairRequest.findMany({
-        where: {
-          property: { landlordId: user.id }
-        },
-        take: 5,
-        orderBy: { createdAt: "desc" },
-        include: {
-          property: true,
-          initiator: true,
-        },
-      });
+    // Get month-over-month changes
+    const [
+      propertiesChange,
+      tenantsChange,
+      repairsChange
+    ] = await Promise.all([
+      getMonthOverMonthChange(propertiesCount, user.id, 'properties'),
+      getMonthOverMonthChange(activeTenantsCount, user.id, 'tenants'),
+      getMonthOverMonthChange(activeRepairsCount, user.id, 'repairs')
+    ]);
 
-      const recentInvitations = await tx.tenantInvitation.findMany({
-        where: {
-          property: { landlordId: user.id }
+    return json({
+      stats: {
+        properties: {
+          count: propertiesCount,
+          change: propertiesChange
         },
-        take: 5,
-        orderBy: { createdAt: "desc" },
-        include: {
-          property: true,
+        tenants: {
+          count: activeTenantsCount,
+          change: tenantsChange
         },
-      });
-
-      const repairsByStatus = await tx.repairRequest.groupBy({
-        where: {
-          property: { landlordId: user.id }
+        repairs: {
+          count: activeRepairsCount,
+          change: repairsChange
         },
-        by: ["status"],
-        _count: true,
-      });
-
-      return {
-        type: 'landlord' as const,
-        propertiesCount,
-        activeTenantsCount,
-        activeRepairsCount,
-        subscription,
-        recentRepairs,
-        recentInvitations,
-        repairsByStatus,
-      };
+        repairTrends
+      } satisfies LandlordStats
     });
-
-    return json({ stats });
   } else {
-    // Get tenant stats
-    const stats = await db.$transaction(async (tx: TransactionClient) => {
-      const activeLeases = await tx.propertyTenant.findMany({
-        where: {
-          tenantId: user.id,
-          status: "ACTIVE",
-          endDate: {
-            gt: new Date(),
-          },
-        },
-        include: {
-          property: {
-            include: {
-              landlord: {
-                select: {
-                  name: true,
-                  email: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      const [activeRepairsCount, pendingRepairsCount] = await Promise.all([
-        tx.repairRequest.count({
-          where: {
-            initiatorId: user.id,
-            status: {
-              in: ["PENDING", "IN_PROGRESS"],
-            },
-          },
-        }),
-        tx.repairRequest.count({
-          where: {
-            initiatorId: user.id,
-            status: "PENDING",
-          },
-        }),
-      ]);
-
-      const recentRepairs = await tx.repairRequest.findMany({
+    const [activeRepairsCount, repairTrends] = await Promise.all([
+      db.repairRequest.count({
         where: {
           initiatorId: user.id,
-        },
-        take: 5,
-        orderBy: { createdAt: "desc" },
-        include: {
-          property: true,
-        },
-      });
+          status: {
+            in: ["PENDING", "IN_PROGRESS"]
+          }
+        }
+      }),
+      getRepairTrends(user.id, user.role)
+    ]);
 
-      const repairsByStatus = await tx.repairRequest.groupBy({
-        where: {
-          initiatorId: user.id,
-        },
-        by: ["status"],
-        _count: true,
-      });
+    const repairsChange = await getMonthOverMonthChange(activeRepairsCount, user.id, 'repairs');
 
-      return {
-        type: 'tenant' as const,
-        activeLeases,
-        activeRepairsCount,
-        pendingRepairsCount,
-        recentRepairs,
-        repairsByStatus,
-      };
+    return json({
+      stats: {
+        repairs: {
+          count: activeRepairsCount,
+          change: repairsChange
+        },
+        repairTrends
+      } satisfies TenantStats
     });
-
-    return json({ stats });
   }
 }
 
 export default function DashboardIndex() {
-  const { stats } = useLoaderData<LoaderData>();
-
-  if (stats.type === 'landlord') {
-    return (
-      <div className="p-6 space-y-6">
-        {/* Landlord Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="p-4">
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-gray-400">Properties</h3>
-              <p className="text-2xl font-bold">{stats.propertiesCount}</p>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-gray-400">Active Tenants</h3>
-              <p className="text-2xl font-bold">{stats.activeTenantsCount}</p>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-gray-400">Active Repairs</h3>
-              <p className="text-2xl font-bold">{stats.activeRepairsCount}</p>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-gray-400">Subscription</h3>
-              <p className="text-2xl font-bold">{stats.subscription?.plan.name || "FREE"}</p>
-              <p className="text-sm text-gray-400">
-                {stats.subscription?.status === "ACTIVE" ? "Active" : "Inactive"}
-              </p>
-            </div>
-          </Card>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Recent Repairs */}
-          <Card className="p-4">
-            <h3 className="text-lg font-semibold mb-4">Recent Repair Requests</h3>
-            <div className="space-y-4">
-              {stats.recentRepairs.map((repair) => (
-                <div key={repair.id} className="flex justify-between items-start border-b border-white/[0.08] pb-4">
-                  <div>
-                    <p className="font-medium">{repair.property.address}</p>
-                    <p className="text-sm text-gray-400">{repair.description}</p>
-                    <p className="text-xs text-gray-500">by {repair.initiator.name}</p>
-                  </div>
-                  <div>
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      repair.status === "PENDING" ? "bg-yellow-500/20 text-yellow-500" :
-                      repair.status === "IN_PROGRESS" ? "bg-blue-500/20 text-blue-500" :
-                      repair.status === "COMPLETED" ? "bg-green-500/20 text-green-500" :
-                      "bg-gray-500/20 text-gray-500"
-                    }`}>
-                      {repair.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Recent Invitations */}
-          <Card className="p-4">
-            <h3 className="text-lg font-semibold mb-4">Recent Invitations</h3>
-            <div className="space-y-4">
-              {stats.recentInvitations.map((invitation) => (
-                <div key={invitation.id} className="flex justify-between items-start border-b border-white/[0.08] pb-4">
-                  <div>
-                    <p className="font-medium">{invitation.property.address}</p>
-                    <p className="text-sm text-gray-400">{invitation.email}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(invitation.startDate).toLocaleDateString()} - {new Date(invitation.endDate).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div>
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      invitation.status === "PENDING" ? "bg-yellow-500/20 text-yellow-500" :
-                      invitation.status === "ACCEPTED" ? "bg-green-500/20 text-green-500" :
-                      "bg-red-500/20 text-red-500"
-                    }`}>
-                      {invitation.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* Status Distribution */}
-        <Card className="p-4">
-          <h3 className="text-lg font-semibold mb-4">Repair Requests by Status</h3>
-          <div className="flex items-center gap-4">
-            {stats.repairsByStatus.map((status) => (
-              <div key={status.status} className="flex-1">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-gray-400">{status.status}</span>
-                  <span className="text-sm font-medium">{status._count}</span>
-                </div>
-                <div className="h-2 rounded-full bg-white/[0.08]">
-                  <div
-                    className={`h-full rounded-full ${
-                      status.status === "PENDING" ? "bg-yellow-500" :
-                      status.status === "IN_PROGRESS" ? "bg-blue-500" :
-                      status.status === "COMPLETED" ? "bg-green-500" :
-                      "bg-gray-500"
-                    }`}
-                    style={{
-                      width: `${(status._count / (stats.activeRepairsCount || 1)) * 100}%`
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  const { stats } = useLoaderData<typeof loader>();
 
   return (
     <div className="p-6 space-y-6">
-      {/* Tenant Active Properties */}
-      <div className="grid grid-cols-1 gap-6">
-        <Card className="p-4">
-          <h3 className="text-lg font-semibold mb-4">Your Properties</h3>
-          <div className="space-y-4">
-            {stats.activeLeases.map((lease) => (
-              <div key={lease.id} className="flex justify-between items-start border-b border-white/[0.08] pb-4">
-                <div>
-                  <p className="font-medium">{lease.property.address}</p>
-                  <p className="text-sm text-gray-400">Landlord: {lease.property.landlord.name}</p>
-                  <p className="text-xs text-gray-500">
-                    Lease: {new Date(lease.startDate).toLocaleDateString()} - {new Date(lease.endDate).toLocaleDateString()}
-                  </p>
-                </div>
-                <div>
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    lease.status === "ACTIVE" ? "bg-green-500/20 text-green-500" :
-                    "bg-gray-500/20 text-gray-500"
-                  }`}>
-                    {lease.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {isLandlordStats(stats) && (
+          <>
+            <DashboardCard
+              title="Total Properties"
+              value={stats.properties.count}
+              icon={Building2}
+              change={{
+                value: stats.properties.change,
+                trend: stats.properties.change >= 0 ? 'up' : 'down'
+              }}
+            />
+            <DashboardCard
+              title="Active Tenants"
+              value={stats.tenants.count}
+              icon={Users}
+              change={{
+                value: stats.tenants.change,
+                trend: stats.tenants.change >= 0 ? 'up' : 'down'
+              }}
+            />
+          </>
+        )}
+        <DashboardCard
+          title="Active Repairs"
+          value={stats.repairs.count}
+          icon={Wrench}
+          change={{
+            value: stats.repairs.change,
+            trend: stats.repairs.change >= 0 ? 'up' : 'down'
+          }}
+        />
+        <DashboardCard
+          title="Total Revenue"
+          value="$12,345"
+          icon={TrendingUp}
+          change={{
+            value: 12.5,
+            trend: 'up'
+          }}
+        />
       </div>
 
-      {/* Tenant Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="p-4">
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-400">Active Repairs</h3>
-            <p className="text-2xl font-bold">{stats.activeRepairsCount}</p>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-400">Pending Repairs</h3>
-            <p className="text-2xl font-bold">{stats.pendingRepairsCount}</p>
-          </div>
-        </Card>
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <BarChart
+          data={stats.repairTrends}
+          className="lg:col-span-2"
+        />
       </div>
-
-      {/* Recent Repairs */}
-      <Card className="p-4">
-        <h3 className="text-lg font-semibold mb-4">Recent Repair Requests</h3>
-        <div className="space-y-4">
-          {stats.recentRepairs.map((repair) => (
-            <div key={repair.id} className="flex justify-between items-start border-b border-white/[0.08] pb-4">
-              <div>
-                <p className="font-medium">{repair.property.address}</p>
-                <p className="text-sm text-gray-400">{repair.description}</p>
-                <p className="text-xs text-gray-500">
-                  Created: {new Date(repair.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-              <div>
-                <span className={`px-2 py-1 rounded-full text-xs ${
-                  repair.status === "PENDING" ? "bg-yellow-500/20 text-yellow-500" :
-                  repair.status === "IN_PROGRESS" ? "bg-blue-500/20 text-blue-500" :
-                  repair.status === "COMPLETED" ? "bg-green-500/20 text-green-500" :
-                  "bg-gray-500/20 text-gray-500"
-                }`}>
-                  {repair.status}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Status Distribution */}
-      <Card className="p-4">
-        <h3 className="text-lg font-semibold mb-4">Your Repairs by Status</h3>
-        <div className="flex items-center gap-4">
-          {stats.repairsByStatus.map((status) => (
-            <div key={status.status} className="flex-1">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-gray-400">{status.status}</span>
-                <span className="text-sm font-medium">{status._count}</span>
-              </div>
-              <div className="h-2 rounded-full bg-white/[0.08]">
-                <div
-                  className={`h-full rounded-full ${
-                    status.status === "PENDING" ? "bg-yellow-500" :
-                    status.status === "IN_PROGRESS" ? "bg-blue-500" :
-                    status.status === "COMPLETED" ? "bg-green-500" :
-                    "bg-gray-500"
-                  }`}
-                  style={{
-                    width: `${(status._count / (stats.activeRepairsCount || 1)) * 100}%`
-                  }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
     </div>
   );
 }

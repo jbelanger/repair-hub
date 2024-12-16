@@ -1,77 +1,13 @@
-@layer base {
-  :root {
-    --primary: #2563EB;
-    --secondary: #4B5563;
-    --background: #F9FAFB;
-    --surface: #FFFFFF;
-    --text: #111827;
-    --border: #E5E7EB;
-    --radius: 0.5rem;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    --font: Inter, system-ui, sans-serif;
-  }
+@import './themes/modern.css';
 
-  .theme-macos {
-    --primary: #007AFF;
-    --secondary: #5856D6;
-    --background: #F5F5F7;
-    --surface: #FFFFFF;
-    --text: #1D1D1F;
-    --border: #D2D2D7;
-    --radius: 0.75rem;
-    --shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.1);
-    --font: "SF Pro Text", -apple-system, system-ui, sans-serif;
-  }
-
-  .theme-material {
-    --primary: #6750A4;
-    --secondary: #625B71;
-    --background: #FFFBFE;
-    --surface: #FFFFFF;
-    --text: #1C1B1F;
-    --border: #E7E0EC;
-    --radius: 1rem;
-    --shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-    --font: Roboto, system-ui, sans-serif;
-  }
+/* Base styles that apply to all themes */
+:root {
+  color-scheme: light dark;
 }
 
-@layer components {
-  .btn {
-    @apply bg-[var(--primary)] rounded-[var(--radius)] shadow-[var(--shadow)] text-white font-[var(--font)] px-4 py-2 transition-all duration-200;
-  }
-
-  .btn:hover {
-    @apply opacity-90 -translate-y-0.5;
-  }
-
-  .card {
-    @apply bg-[var(--surface)] rounded-[var(--radius)] shadow-[var(--shadow)] border border-[var(--border)] p-6;
-  }
-
-  .input {
-    @apply bg-[var(--surface)] border border-[var(--border)] rounded-[var(--radius)] text-[var(--text)] font-[var(--font)] px-4 py-2;
-  }
-
-  .input:focus {
-    @apply border-[var(--primary)] outline-none ring-1 ring-[var(--primary)] ring-opacity-10;
-  }
-}
-
-@layer utilities {
-  .theme-macos .btn {
-    @apply font-medium;
-  }
-
-  .theme-material .btn {
-    @apply uppercase tracking-wider;
-  }
-
-  .theme-macos .card {
-    @apply backdrop-blur-xl;
-  }
-
-  .theme-material .card {
-    @apply transition-shadow duration-300 ease-in-out hover:shadow-lg;
-  }
+/* Theme class utilities */
+.theme-modern {
+  color-scheme: dark;
+  /* background-color: var(--color-bg-primary); */
+  color: var(--color-text-primary);
 }

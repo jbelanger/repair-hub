@@ -10,8 +10,10 @@ import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 import { config } from "~/utils/blockchain/config";
+import { ThemeProvider } from "~/context/ThemeContext";
 
 import "./tailwind.css";
+import "./styles/themes.css";
 
 const queryClient = new QueryClient();
 
@@ -30,14 +32,14 @@ export const links: LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
       </head>
-      <body className="min-h-screen bg-[#0A0612]">
+      <body>
         {/* Background decoration */}
         <div className="fixed inset-0 -z-10">
           {/* Base gradient */}
@@ -65,7 +67,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           />
         </div>
 
-        <div className="relative z-0">
+        <div className="relative z-0 min-h-screen">
           {children}
         </div>
         <ScrollRestoration />
@@ -77,11 +79,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-  <WagmiProvider config={config}>
-  <QueryClientProvider client={queryClient}>
-    <RainbowKitProvider theme={darkTheme()}>
-      <Outlet />
-      </RainbowKitProvider>
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        <RainbowKitProvider theme={darkTheme()}>
+          <ThemeProvider>
+            <Outlet />
+          </ThemeProvider>
+        </RainbowKitProvider>
       </QueryClientProvider>
-    </WagmiProvider>);
+    </WagmiProvider>
+  );
 }

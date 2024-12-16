@@ -1,186 +1,141 @@
 import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
-import { Link, Outlet, useLoaderData, useLocation, useNavigate } from "@remix-run/react";
-import { WagmiProvider } from 'wagmi'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
-import { config } from "~/utils/blockchain/config";
-import { Bell, LayoutDashboard, Settings } from 'lucide-react';
-import '@rainbow-me/rainbowkit/styles.css';
+import { Outlet, useLoaderData } from "@remix-run/react";
 import { ConnectWallet } from "~/components/ConnectWallet";
-import { Button } from "~/components/ui/Button";
-import { Logo } from "~/components/Logo";
 import { RoleSwitcher } from "~/components/RoleSwitcher";
-import { getUserFromSession, createUserSession } from "~/utils/session.server";
+import { requireUser } from "~/utils/session.server";
+import { Search } from "~/components/ui/Search";
+import { Bell, Settings } from "lucide-react";
+import { Sidebar } from "~/components/ui/Sidebar";
 import { db } from "~/utils/db.server";
+import { Logo } from "~/components/Logo";
 
-const queryClient = new QueryClient()
-
-type LoaderData = {
-  user: {
-    id: string;
-    address: string;
-    role: string;
-    name: string;
-    email: string;
-    phone: string | null;
-  } | null;
-};
-
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const walletAddress = url.searchParams.get("address")?.toLowerCase();
-  const isRegisterPage = url.pathname === "/register";
+export async function loader({ request }: LoaderFunctionArgs) {
+  const user = await requireUser(request);
   
-  // Get user from session first
-  const sessionUser = await getUserFromSession(request);
-  
-  // If we have a session user, use that
-  if (sessionUser) {
-    // Get full user data including email and phone
-    const user = await db.user.findUnique({
-      where: { id: sessionUser.id },
-      select: { 
-        id: true,
-        address: true,
-        role: true,
-        name: true,
-        email: true,
-        phone: true,
-      },
-    });
-    return json<LoaderData>({ user });
+  if (!user) {
+    return redirect("/");
   }
-  
-  // If we have a wallet address and we're not on the register page
-  if (walletAddress && !isRegisterPage) {
-    // Check if user exists
-    const user = await db.user.findUnique({
-      where: { address: walletAddress },
-      select: { 
-        id: true,
-        address: true,
-        role: true,
-        name: true,
-        email: true,
-        phone: true,
-      },
-    });
 
-    // If user exists, create session and return user
-    if (user) {
-      throw await createUserSession(user.id, url.pathname);
+
+  // Get counts for the navigation badges
+  const [propertiesCount, pendingRepairsCount, activeTenantsCount] = await Promise.all([
+    user.role === "LANDLORD" 
+      ? db.property.count({ where: { landlordId: user.id } })
+      : 0,
+    user.role === "LANDLORD"
+      ? db.repairRequest.count({
+          where: {
+            property: { landlordId: user.id },
+            status: "PENDING"
+          }
+        })
+      : db.repairRequest.count({
+          where: {
+            initiatorId: user.id,
+            status: "PENDING"
+          }
+        }),
+    user.role === "LANDLORD"
+      ? db.propertyTenant.count({
+          where: {
+            property: { landlordId: user.id },
+            status: "ACTIVE"
+          }
+        })
+      : 0
+  ]);
+
+  return json({ 
+    currentRole: user.role,
+    user,
+    counts: {
+      properties: propertiesCount,
+      repairs: pendingRepairsCount,
+      tenants: activeTenantsCount
     }
-    
-    // If user doesn't exist, redirect to register
-    if (!isRegisterPage) {
-      throw redirect(`/app/register?address=${walletAddress}`);
-    }
-  }
+  });
+}
 
-  // If we're on a protected route and have no user, throw unauthorized
-  const isProtectedRoute = url.pathname.startsWith('/repair-requests');
-  if (isProtectedRoute && !sessionUser) {
-    throw new Response("Unauthorized", { status: 401 });
-  }
-
-  return json<LoaderData>({ user: null });
-};
-
-export default function Layout() {
-  const { user } = useLoaderData<typeof loader>();
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  // Navigation items based on user role
-  const navigation = [
-    // Show repair requests to all authenticated users
-    ...(user ? [{ name: 'Repair Requests', href: '/app/repair-requests' }] : []),
-    // Show dashboard only to landlords
-    ...(user?.role === "LANDLORD" ? [{ name: 'Dashboard', href: '/app/dashboard' }] : []),
-  ];
+export default function AppLayout() {
+  const { currentRole, user, counts } = useLoaderData<typeof loader>();
 
   return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={darkTheme()}>
-          <div className="min-h-screen">
-            {/* Navigation */}
-            <nav className="fixed top-0 z-50 w-full border-b border-white/[0.02] bg-background/80 backdrop-blur-xl">
-              <div className="mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex h-16 items-center justify-between">
-                  <div className="flex items-center gap-6">
-                    <Logo logoSrc="/logo5.svg" size="xl" className="py-1" />
-                    
-                    {/* Main Navigation - Only show if user is authenticated */}
-                    {user && (
-                      <div className="hidden md:flex md:gap-1">
-                        {navigation.map((item) => {
-                          const isActive = location.pathname.startsWith(item.href);
-                          return (
-                            <Link
-                              key={item.name}
-                              to={item.href}
-                              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors
-                                ${isActive 
-                                  ? 'bg-white/[0.04] text-white' 
-                                  : 'text-white/70 hover:bg-white/[0.02] hover:text-white'
-                                }`}
-                            >
-                              {item.name}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
+    <div className="min-h-screen">
+      {/* Background decoration */}
+      <div className="fixed inset-0 -z-10">
+        {/* Base gradient */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-[#1A0B38] via-[#0A0612] to-[#0A0612]" />
+        
+        {/* Glowing orbs */}
+        <div className="absolute -left-1/4 top-0 h-[800px] w-[800px] rounded-full bg-[#1A0B38]/10 blur-[120px]" />
+        <div className="absolute -right-1/4 top-1/4 h-[600px] w-[600px] rounded-full bg-[#1A0B38]/10 blur-[120px]" />
+        
+        {/* Dot pattern overlay */}
+        <div 
+          className="absolute inset-0 opacity-[0.3] mix-blend-soft-light"
+          style={{
+            backgroundImage: `radial-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px)`,
+            backgroundSize: '24px 24px',
+          }}
+        />
+        
+        {/* Noise texture */}
+        <div 
+          className="absolute inset-0 opacity-[0.02] mix-blend-soft-light"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+          }}
+        />
+      </div>
 
-                  {/* Right side navigation */}
-                  <div className="flex items-center gap-2">
-                    {user && (
-                      <>
-                        {user.role === "LANDLORD" && (
-                          <Button 
-                            variant="ghost" 
-                            size="icon"
-                            className="hover:bg-white/[0.02]"
-                            onClick={() => navigate("/dashboard")}
-                          >
-                            <LayoutDashboard className="h-5 w-5" />
-                          </Button>
-                        )}
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          className="hover:bg-white/[0.02]"
-                        >
-                          <Bell className="h-5 w-5" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          className="hover:bg-white/[0.02]"
-                          onClick={() => navigate("/profile-settings")}
-                        >
-                          <Settings className="h-5 w-5" />
-                        </Button>
-                        {/* Role Switcher - Development Only */}
-                        {user && <RoleSwitcher currentRole={user.role} />}
-                        <div className="mx-2 h-5 w-px bg-white/[0.04]" />
-                      </>
-                    )}
-                    <ConnectWallet />
-                  </div>
-                </div>
-              </div>
-            </nav>
-
-            {/* Main content */}
-            <main className="mx-auto max-w-[1200px] p-4 pt-20 sm:p-6 sm:pt-24 lg:p-8 lg:pt-28">
-              <Outlet />
-            </main>
+      {/* Top Header */}
+      <header className="fixed top-0 left-0 right-0 h-16 backdrop-blur-[var(--backdrop-blur)] z-50">
+        <div className="h-full px-4 flex items-center justify-between" style={{
+          backgroundColor: 'var(--card-bg)',
+          borderBottom: '1px solid var(--card-border)'
+        }}>
+          {/* Left: Logo and App Name */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+            <Logo logoSrc="/logo5.svg" size="xl" className="py-1" />
+            </div>
           </div>
-        </RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
+
+          {/* Center: Search */}
+          <div className="flex-1 max-w-xl mx-4">
+            <Search className="w-full" />
+          </div>
+
+          {/* Right: Actions */}
+          <div className="flex items-center gap-4">
+            <RoleSwitcher currentRole={currentRole} />
+            <button
+              className="p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)]"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              <Bell className="h-5 w-5" />
+            </button>
+            <button
+              className="p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)]"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              <Settings className="h-5 w-5" />
+            </button>
+            <ConnectWallet />
+          </div>
+        </div>
+      </header>
+
+      {/* Main Layout */}
+      <div className="flex h-[calc(100vh-4rem)] pt-16">
+        {/* Sidebar */}
+        <Sidebar user={user} counts={counts} />
+
+        {/* Main Content */}
+        <div className="flex-1 overflow-auto">
+          <Outlet />
+        </div>
+      </div>
+    </div>
   );
 }

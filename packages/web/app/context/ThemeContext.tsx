@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode } from 'react';
-import { ThemeVariant, getThemeClass } from '~/styles/themes';
+import { ThemeVariant, getThemeClass } from '~/utils/themes';
 
 interface ThemeContextType {
   theme: ThemeVariant;
@@ -9,7 +9,7 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<ThemeVariant>('minimal');
+  const [theme, setTheme] = useState<ThemeVariant>('modern');
 
   const value = {
     theme,
