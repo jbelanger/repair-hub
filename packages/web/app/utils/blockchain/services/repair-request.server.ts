@@ -6,12 +6,15 @@ interface ContractEventLog {
   args: {
     id?: bigint
     initiator?: string
+    landlord?: string
     propertyId?: string
     descriptionHash?: string
-    status?: bigint
-    createdAt?: bigint
+    workDetailsHash?: string
+    oldStatus?: bigint
+    newStatus?: bigint
     oldHash?: string
     newHash?: string
+    createdAt?: bigint
     updatedAt?: bigint
   }
   blockNumber: bigint
@@ -20,7 +23,7 @@ interface ContractEventLog {
   removed: boolean
   address: `0x${string}`
   data: `0x${string}`
-  topics: `0x${string}`[]
+  topics: readonly `0x${string}`[]
   transactionHash: `0x${string}`
   logIndex: number
 }
@@ -63,7 +66,8 @@ export class RepairRequestService {
 
   static async createRepairRequest(
     propertyId: string,
-    descriptionHash: string
+    descriptionHash: string,
+    landlord: string
   ): Promise<`0x${string}`> {
     const client = await getWalletClient(config)
     if (!client) throw new Error('Wallet not connected')
@@ -72,7 +76,7 @@ export class RepairRequestService {
       address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
       abi: RepairRequestContractABI,
       functionName: 'createRepairRequest',
-      args: [propertyId, descriptionHash],
+      args: [propertyId, descriptionHash, landlord as `0x${string}`],
     })
 
     await waitForTransaction(config, { hash })
@@ -90,16 +94,16 @@ export class RepairRequestService {
       address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
       abi: RepairRequestContractABI,
       functionName: 'updateRepairRequestStatus',
-      args: [requestId, status],
+      args: [requestId, BigInt(status)],
     })
 
     await waitForTransaction(config, { hash })
     return hash
   }
 
-  static async updateDescriptionHash(
+  static async updateDescription(
     requestId: bigint,
-    newDescriptionHash: string
+    descriptionHash: string
   ): Promise<`0x${string}`> {
     const client = await getWalletClient(config)
     if (!client) throw new Error('Wallet not connected')
@@ -107,8 +111,61 @@ export class RepairRequestService {
     const hash = await client.writeContract({
       address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
       abi: RepairRequestContractABI,
-      functionName: 'updateDescriptionHash',
-      args: [requestId, newDescriptionHash],
+      functionName: 'updateDescription',
+      args: [requestId, descriptionHash],
+    })
+
+    await waitForTransaction(config, { hash })
+    return hash
+  }
+
+  static async updateWorkDetails(
+    requestId: bigint,
+    workDetailsHash: string
+  ): Promise<`0x${string}`> {
+    const client = await getWalletClient(config)
+    if (!client) throw new Error('Wallet not connected')
+
+    const hash = await client.writeContract({
+      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
+      abi: RepairRequestContractABI,
+      functionName: 'updateWorkDetails',
+      args: [requestId, workDetailsHash],
+    })
+
+    await waitForTransaction(config, { hash })
+    return hash
+  }
+
+  static async withdrawRepairRequest(
+    requestId: bigint
+  ): Promise<`0x${string}`> {
+    const client = await getWalletClient(config)
+    if (!client) throw new Error('Wallet not connected')
+
+    const hash = await client.writeContract({
+      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
+      abi: RepairRequestContractABI,
+      functionName: 'withdrawRepairRequest',
+      args: [requestId],
+    })
+
+    await waitForTransaction(config, { hash })
+    return hash
+  }
+
+  static async approveWork(
+    requestId: bigint,
+    isAccepted: boolean
+  ): Promise<`0x${string}`> {
+    const client = await getWalletClient(config)
+    if (!client) throw new Error('Wallet not connected')
+
+    const hash = await client.writeContract({
+      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
+      abi: RepairRequestContractABI,
+      functionName: 'approveWork',
+      args: [requestId, isAccepted],
     })
 
     await waitForTransaction(config, { hash })
@@ -129,8 +186,10 @@ export class RepairRequestService {
     const result = data as unknown as {
       id: bigint
       initiator: `0x${string}`
+      landlord: `0x${string}`
       propertyId: string
       descriptionHash: string
+      workDetailsHash: string
       status: bigint
       createdAt: bigint
       updatedAt: bigint
@@ -139,8 +198,10 @@ export class RepairRequestService {
     return {
       id: result.id,
       initiator: result.initiator,
+      landlord: result.landlord,
       propertyId: result.propertyId,
       descriptionHash: result.descriptionHash,
+      workDetailsHash: result.workDetailsHash,
       status: Number(result.status) as RepairRequestStatusType,
       createdAt: result.createdAt,
       updatedAt: result.updatedAt,

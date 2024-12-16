@@ -4,43 +4,26 @@ import { http } from 'wagmi'
 
 export const CONTRACT_ADDRESSES = {
   REPAIR_REQUEST: import.meta.env.VITE_REPAIR_REQUEST_CONTRACT,
-  WORK_ORDER: import.meta.env.VITE_WORK_ORDER_CONTRACT,
 } as const
 
 export enum RepairRequestStatusType {
   PENDING = 0,
-  APPROVED = 1,
-  IN_PROGRESS = 2,
-  COMPLETED = 3,
-  CANCELLED = 4,
-}
-
-export enum WorkOrderStatusType {
-  PENDING = 0,
-  ACCEPTED = 1,
-  IN_PROGRESS = 2,
-  COMPLETED = 3,
-  CANCELLED = 4,
+  IN_PROGRESS = 1,
+  COMPLETED = 2,
+  ACCEPTED = 3,
+  REFUSED = 4,
+  REJECTED = 5,
+  CANCELLED = 6,
 }
 
 export interface RepairRequest {
   id: bigint
   initiator: `0x${string}`
+  landlord: `0x${string}`
   propertyId: string
   descriptionHash: string
+  workDetailsHash: string
   status: RepairRequestStatusType
-  createdAt: bigint
-  updatedAt: bigint
-}
-
-export interface WorkOrder {
-  id: bigint
-  repairRequestId: bigint
-  landlord: `0x${string}`
-  contractor: `0x${string}`
-  agreedPrice: bigint
-  descriptionHash: string
-  status: WorkOrderStatusType
   createdAt: bigint
   updatedAt: bigint
 }

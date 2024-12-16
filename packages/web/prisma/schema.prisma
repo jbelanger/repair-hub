@@ -19,14 +19,11 @@ model User {
   address          String   @unique // Ethereum address
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
-  // Current property the user is associated with
-  currentProperty  Property? @relation("CurrentProperty", fields: [currentPropertyId], references: [id])
-  currentPropertyId String?
 
   // Properties owned by this user (if they're a landlord)
-  properties        Property[]      @relation("LandlordProperties")
-  // Properties where this user is a tenant
-  tenancies         Property[]      @relation("TenantProperties")
+  ownedProperties  Property[]      @relation("LandlordProperties")
+  // Property leases for this user (if they're a tenant)
+  propertyLeases   PropertyTenant[]
   // Repair requests initiated by this user
   initiatedRequests RepairRequest[] @relation("InitiatedRequests")
 }
@@ -37,60 +34,63 @@ model Property {
   // The landlord who owns this property
   landlord   User            @relation("LandlordProperties", fields: [landlordId], references: [id])
   landlordId String
-  // Tenants living in this property
-  tenants    User[]          @relation("TenantProperties")
-  // Users who have this as their current property
-  currentUsers User[]        @relation("CurrentProperty")
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
+
+  // Tenant leases for this property
+  tenantLeases    PropertyTenant[]
+  // Pending invitations for this property
+  invitations     TenantInvitation[]
   // Repair requests for this property
+  repairs         RepairRequest[]
+}
+
+model PropertyTenant {
+  id         String   @id @default(cuid())
+  property   Property @relation(fields: [propertyId], references: [id])
+  propertyId String
+  tenant     User     @relation(fields: [tenantId], references: [id])
+  tenantId   String
+  startDate  DateTime
+  endDate    DateTime
+  status     String   // "ACTIVE", "EXPIRED", "TERMINATED"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Repair requests made during this lease
   repairs    RepairRequest[]
 }
 
+model TenantInvitation {
+  id         String   @id @default(cuid())
+  property   Property @relation(fields: [propertyId], references: [id])
+  propertyId String
+  email      String
+  startDate  DateTime
+  endDate    DateTime
+  status     String   // "PENDING", "ACCEPTED", "EXPIRED"
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+}
+
 model RepairRequest {
-  id          String           @id // This will match the blockchain ID
+  id             String    @id // This will match the blockchain ID
   // The user who initiated the request
-  initiator   User             @relation("InitiatedRequests", fields: [initiatorId], references: [id])
-  initiatorId String
+  initiator      User      @relation("InitiatedRequests", fields: [initiatorId], references: [id])
+  initiatorId    String
   // The property this request is for
-  property    Property         @relation(fields: [propertyId], references: [id])
-  propertyId  String
-  description String
-  urgency     String // "LOW", "MEDIUM", "HIGH"
-  status      String // Matches blockchain status
-  attachments String // IPFS hashes, comma-separated
-  hash        String // Blockchain verification hash
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  // Contracts associated with this repair request
-  contracts   RepairContract[]
-}
-
-model Contractor {
-  id             String           @id @default(cuid())
-  name           String
-  specialization String
-  phone          String
-  email          String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  // Contracts assigned to this contractor
-  contracts      RepairContract[]
-}
-
-model RepairContract {
-  id             String        @id // This will match the blockchain ID
-  // The repair request this contract is for
-  request        RepairRequest @relation(fields: [requestId], references: [id])
-  requestId      String
-  // The contractor assigned to this contract
-  contractor     Contractor    @relation(fields: [contractorId], references: [id])
-  contractorId   String
-  agreedPrice    Float // Using Float instead of Decimal for SQLite
-  status         String // Matches blockchain status
-  startDate      DateTime
-  completionDate DateTime?
-  hash           String // Blockchain verification hash
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  property       Property  @relation(fields: [propertyId], references: [id])
+  propertyId     String
+  // The lease under which this request was made
+  lease          PropertyTenant @relation(fields: [leaseId], references: [id])
+  leaseId        String
+  description    String
+  descriptionHash String   // Hash of the repair description for blockchain verification
+  workDetails    String?   // Details of work to be done/completed
+  workDetailsHash String?  // Hash of the work details for blockchain verification
+  urgency        String    // "LOW", "MEDIUM", "HIGH"
+  status         String    // "PENDING", "IN_PROGRESS", "COMPLETED", "ACCEPTED", "REFUSED", "REJECTED", "CANCELLED"
+  attachments    String    // IPFS hashes, comma-separated
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
