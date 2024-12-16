@@ -17,7 +17,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   
   // Only landlords can access this page
   if (user.role !== "LANDLORD") {
-    return redirect("/");
+    return redirect("/app");
   }
 
   return json({});
@@ -49,7 +49,7 @@ export async function action({ request }: ActionFunctionArgs) {
     await createProperty(user.id, address, placeId);
 
     // Redirect to properties list
-    return redirect("/properties");
+    return redirect("/app/properties");
   } catch (error) {
     console.error("Create property error:", error);
     return json<ActionData>(

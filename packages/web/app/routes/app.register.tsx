@@ -25,7 +25,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const plan = url.searchParams.get("plan");
 
   if (!address) {
-    return redirect("/");
+    return redirect("/app");
   }
 
   // Check if user already exists

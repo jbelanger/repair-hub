@@ -88,7 +88,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
     });
 
-    return redirect(`/dashboard/properties/${property.id}`);
+    return redirect(`/app/dashboard/properties/${property.id}`);
   } catch (error) {
     console.error("Create invitation error:", error);
     return json<ActionData>(
@@ -105,7 +105,7 @@ export default function InviteTenant() {
   return (
     <div>
       <div className="flex items-center gap-4 mb-8">
-        <Link to={`/dashboard/properties/${property.id}`}>
+        <Link to={`/app/dashboard/properties/${property.id}`}>
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-5 w-5" />
           </Button>

@@ -10,7 +10,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   
   // Only logged in users can access dashboard
   if (!user) {
-    return redirect("/");
+    return redirect("/app");
   }
 
   // Get counts for the navigation badges

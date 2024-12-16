@@ -73,7 +73,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     
     // If user doesn't exist, redirect to register
     if (!isRegisterPage) {
-      throw redirect(`/register?address=${walletAddress}`);
+      throw redirect(`/app/register?address=${walletAddress}`);
     }
   }
 
@@ -94,9 +94,9 @@ export default function Layout() {
   // Navigation items based on user role
   const navigation = [
     // Show repair requests to all authenticated users
-    ...(user ? [{ name: 'Repair Requests', href: '/repair-requests' }] : []),
+    ...(user ? [{ name: 'Repair Requests', href: '/app/repair-requests' }] : []),
     // Show dashboard only to landlords
-    ...(user?.role === "LANDLORD" ? [{ name: 'Dashboard', href: '/dashboard' }] : []),
+    ...(user?.role === "LANDLORD" ? [{ name: 'Dashboard', href: '/app/dashboard' }] : []),
   ];
 
   return (

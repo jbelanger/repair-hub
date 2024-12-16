@@ -22,7 +22,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   
   // Only landlords can access this page
   if (user.role !== "LANDLORD") {
-    return redirect("/");
+    return redirect("/app");
   }
 
   const property = await db.property.findUnique({
@@ -100,7 +100,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
     });
 
-    return redirect(`/properties/${property.id}`);
+    return redirect(`/app/properties/${property.id}`);
   } catch (error) {
     console.error("Create invitation error:", error);
     return json<ActionData>(

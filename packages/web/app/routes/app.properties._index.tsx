@@ -11,7 +11,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   
   // Only landlords can access this page
   if (user.role !== "LANDLORD") {
-    return redirect("/");
+    return redirect("/app");
   }
 
   const properties = await db.property.findMany({
