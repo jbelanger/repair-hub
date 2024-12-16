@@ -71,7 +71,7 @@ export default function Index() {
                 {isConnected &&             
                     (<button
                         onClick={() => {
-                          navigate('/app')
+                          navigate('/dashboard')
                         }}
                         className="text-sm font-medium text-white/70 hover:text-white transition-colors">
                         Login

@@ -1,5 +1,5 @@
 import { Outlet } from "@remix-run/react";
 
-export default function DashboardLayout() {
+export default function DashboardPropertiesLayout() {
   return <Outlet />;
 }

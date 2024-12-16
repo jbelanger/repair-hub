@@ -20,7 +20,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   
   // Only landlords can create properties
   if (user.role !== "LANDLORD") {
-    return redirect("/app/dashboard");
+    return redirect("/dashboard");
   }
 
   return json({});
@@ -62,7 +62,7 @@ export async function action({ request }: ActionFunctionArgs) {
       }
     });
 
-    return redirect(`/app/dashboard/properties/${property.id}`);
+    return redirect(`/dashboard/properties/${property.id}`);
   } catch (error) {
     console.error("Create property error:", error);
     return json<ActionData>(

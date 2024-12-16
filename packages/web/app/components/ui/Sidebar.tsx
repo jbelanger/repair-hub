@@ -35,44 +35,44 @@ export function Sidebar({ user, counts }: SidebarProps) {
   const navigation = [
     {
       name: "Dashboard",
-      to: "/app/dashboard",
+      to: "/dashboard",
       icon: LayoutDashboard,
-      current: location.pathname === "/app/dashboard",
+      current: location.pathname === "/dashboard",
     },
     ...(user.role === "LANDLORD"
       ? [
           {
             name: "Properties",
-            to: "/app/dashboard/properties",
+            to: "/dashboard/properties",
             icon: Building2,
             count: counts.properties,
-            current: location.pathname.startsWith("/app/dashboard/properties"),
+            current: location.pathname.startsWith("/dashboard/properties"),
           },
         ]
       : []),
     {
       name: "Repairs",
-      to: "/app/dashboard/repairs",
+      to: "/dashboard/repairs",
       icon: Wrench,
       count: counts.repairs,
-      current: location.pathname.startsWith("/app/dashboard/repairs"),
+      current: location.pathname.startsWith("/dashboard/repairs"),
     },
     ...(user.role === "LANDLORD"
       ? [
           {
             name: "Tenants",
-            to: "/app/dashboard/tenants",
+            to: "/dashboard/tenants",
             icon: Users,
             count: counts.tenants,
-            current: location.pathname === "/app/dashboard/tenants",
+            current: location.pathname === "/dashboard/tenants",
           },
         ]
       : []),
     {
       name: "Settings",
-      to: "/app/dashboard/profile",
+      to: "/dashboard/profile",
       icon: Settings,
-      current: location.pathname === "/app/dashboard/profile",
+      current: location.pathname === "/dashboard/profile",
     },
   ];
 

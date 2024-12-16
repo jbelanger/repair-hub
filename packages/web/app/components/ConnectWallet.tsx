@@ -15,7 +15,7 @@ export function ConnectWallet({ variant = "default", alwaysShowConnect = false }
     onConnect({ address, connector, isReconnected }) {
       console.log('Connected:', { address, connector, isReconnected });
       if(!isReconnected)
-        navigate('/app');
+        navigate('/dashboard');
     },
     onDisconnect() {
       console.log('Disconnected');      
