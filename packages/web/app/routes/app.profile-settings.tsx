@@ -24,7 +24,6 @@ type LoaderData = {
     address: string;
     isLandlord: boolean;
   }[];
-  currentPropertyId: string | null;
 };
 
 type UserWithProperties = Prisma.UserGetPayload<{
@@ -33,21 +32,20 @@ type UserWithProperties = Prisma.UserGetPayload<{
     email: true;
     phone: true;
     role: true;
-    currentProperty: {
-      select: {
-        id: true;
-      };
-    };
-    properties: {
+    ownedProperties: {
       select: {
         id: true;
         address: true;
       };
     };
-    tenancies: {
+    propertyLeases: {
       select: {
-        id: true;
-        address: true;
+        property: {
+          select: {
+            id: true;
+            address: true;
+          };
+        };
       };
     };
   };
@@ -66,21 +64,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
       email: true,
       phone: true,
       role: true,
-      currentProperty: {
-        select: {
-          id: true,
-        },
-      },
-      properties: {
+      ownedProperties: {
         select: {
           id: true,
           address: true,
         },
       },
-      tenancies: {
+      propertyLeases: {
         select: {
-          id: true,
-          address: true,
+          property: {
+            select: {
+              id: true,
+              address: true,
+            },
+          },
         },
       },
     },
@@ -92,8 +89,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // Combine and format properties
   const properties = [
-    ...userData.properties.map(p => ({ ...p, isLandlord: true })),
-    ...userData.tenancies.map(p => ({ ...p, isLandlord: false }))
+    ...userData.ownedProperties.map(p => ({ ...p, isLandlord: true })),
+    ...userData.propertyLeases.map(lease => ({ 
+      id: lease.property.id, 
+      address: lease.property.address, 
+      isLandlord: false 
+    }))
   ];
 
   return json<LoaderData>({ 
@@ -104,7 +105,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
       role: userData.role,
     },
     properties,
-    currentPropertyId: userData.currentProperty?.id ?? null
   });
 }
 
@@ -118,7 +118,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const name = formData.get("name") as string;
   const email = formData.get("email") as string;
   const phone = formData.get("phone") as string;
-  const propertyId = formData.get("propertyId") as string;
 
   // Validate required fields
   if (!name?.trim()) {
@@ -126,9 +125,6 @@ export async function action({ request }: ActionFunctionArgs) {
   }
   if (!email?.trim()) {
     return json<ActionData>({ error: "Email is required" }, { status: 400 });
-  }
-  if (!propertyId?.trim()) {
-    return json<ActionData>({ error: "Property is required" }, { status: 400 });
   }
 
   try {
@@ -145,24 +141,6 @@ export async function action({ request }: ActionFunctionArgs) {
       );
     }
 
-    // Verify the property exists and user has access to it
-    const property = await db.property.findFirst({
-      where: {
-        id: propertyId,
-        OR: [
-          { landlordId: user.id },
-          { tenants: { some: { id: user.id } } }
-        ]
-      }
-    });
-
-    if (!property) {
-      return json<ActionData>(
-        { error: "Invalid property selection" },
-        { status: 400 }
-      );
-    }
-
     // Update user profile
     await db.user.update({
       where: { id: user.id },
@@ -170,11 +148,6 @@ export async function action({ request }: ActionFunctionArgs) {
         name: name.trim(),
         email: email.trim(),
         phone: phone?.trim() || null,
-        currentProperty: {
-          connect: {
-            id: propertyId
-          }
-        }
       },
     });
 
@@ -210,7 +183,7 @@ export default function ProfileSettings() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const actionData = useActionData<typeof action>();
-  const { user, properties, currentPropertyId } = useLoaderData<typeof loader>();
+  const { user, properties } = useLoaderData<typeof loader>();
   const [showSuccess, setShowSuccess] = useState(false);
   
   const isSubmitting = navigation.state === "submitting";
@@ -299,25 +272,25 @@ export default function ProfileSettings() {
               </div>
 
               <div>
-                <label htmlFor="propertyId" className="mb-2 block text-sm">
-                  Current Property
+                <label htmlFor="properties" className="mb-2 block text-sm">
+                  Properties
                 </label>
-                <Select
-                  id="propertyId"
-                  name="propertyId"
-                  defaultValue={currentPropertyId || undefined}
-                  required
-                  className="bg-white/[0.04] focus:bg-white/[0.08]"
-                  leftIcon={<Home className="h-5 w-5" />}
-                  disabled={isSubmitting}
-                >
-                  <option value="">Select a property</option>
+                <div className="space-y-2">
                   {properties.map((property) => (
-                    <option key={property.id} value={property.id}>
-                      {property.address} ({property.isLandlord ? 'Owner' : 'Tenant'})
-                    </option>
+                    <div 
+                      key={property.id}
+                      className="rounded-lg border border-white/[0.08] bg-white/[0.02] p-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Home className="h-5 w-5 text-white/70" />
+                        <span>{property.address}</span>
+                        <span className="ml-auto text-sm text-white/50">
+                          {property.isLandlord ? 'Owner' : 'Tenant'}
+                        </span>
+                      </div>
+                    </div>
                   ))}
-                </Select>
+                </div>
               </div>
 
               <div>

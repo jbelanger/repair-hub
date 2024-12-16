@@ -4,7 +4,8 @@ export const RepairRequestContractABI = [
     name: 'createRepairRequest',
     inputs: [
       { name: '_propertyId', type: 'string' },
-      { name: '_descriptionHash', type: 'string' }
+      { name: '_descriptionHash', type: 'string' },
+      { name: '_landlord', type: 'address' }
     ],
     outputs: [],
     stateMutability: 'nonpayable'
@@ -14,17 +15,44 @@ export const RepairRequestContractABI = [
     name: 'updateRepairRequestStatus',
     inputs: [
       { name: '_id', type: 'uint256' },
-      { name: '_status', type: 'uint8' }
+      { name: '_status', type: 'uint256' }
     ],
     outputs: [],
     stateMutability: 'nonpayable'
   },
   {
     type: 'function',
-    name: 'updateDescriptionHash',
+    name: 'updateDescription',
     inputs: [
       { name: '_id', type: 'uint256' },
-      { name: '_newDescriptionHash', type: 'string' }
+      { name: '_descriptionHash', type: 'string' }
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable'
+  },
+  {
+    type: 'function',
+    name: 'updateWorkDetails',
+    inputs: [
+      { name: '_id', type: 'uint256' },
+      { name: '_workDetailsHash', type: 'string' }
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable'
+  },
+  {
+    type: 'function',
+    name: 'withdrawRepairRequest',
+    inputs: [{ name: '_id', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable'
+  },
+  {
+    type: 'function',
+    name: 'approveWork',
+    inputs: [
+      { name: '_id', type: 'uint256' },
+      { name: '_isAccepted', type: 'bool' }
     ],
     outputs: [],
     stateMutability: 'nonpayable'
@@ -39,8 +67,10 @@ export const RepairRequestContractABI = [
         components: [
           { name: 'id', type: 'uint256' },
           { name: 'initiator', type: 'address' },
+          { name: 'landlord', type: 'address' },
           { name: 'propertyId', type: 'string' },
           { name: 'descriptionHash', type: 'string' },
+          { name: 'workDetailsHash', type: 'string' },
           { name: 'status', type: 'uint8' },
           { name: 'createdAt', type: 'uint256' },
           { name: 'updatedAt', type: 'uint256' }
@@ -53,8 +83,9 @@ export const RepairRequestContractABI = [
     type: 'event',
     name: 'RepairRequestCreated',
     inputs: [
-      { name: 'id', type: 'uint256', indexed: false },
-      { name: 'initiator', type: 'address', indexed: false },
+      { name: 'id', type: 'uint256', indexed: true },
+      { name: 'initiator', type: 'address', indexed: true },
+      { name: 'landlord', type: 'address', indexed: true },
       { name: 'propertyId', type: 'string', indexed: false },
       { name: 'descriptionHash', type: 'string', indexed: false },
       { name: 'createdAt', type: 'uint256', indexed: false }
@@ -62,18 +93,35 @@ export const RepairRequestContractABI = [
   },
   {
     type: 'event',
-    name: 'RepairRequestUpdated',
+    name: 'RepairRequestStatusChanged',
     inputs: [
-      { name: 'id', type: 'uint256', indexed: false },
-      { name: 'status', type: 'uint8', indexed: false },
+      { name: 'id', type: 'uint256', indexed: true },
+      { name: 'initiator', type: 'address', indexed: true },
+      { name: 'landlord', type: 'address', indexed: true },
+      { name: 'oldStatus', type: 'uint8', indexed: false },
+      { name: 'newStatus', type: 'uint8', indexed: false },
       { name: 'updatedAt', type: 'uint256', indexed: false }
     ]
   },
   {
     type: 'event',
-    name: 'DescriptionHashUpdated',
+    name: 'DescriptionUpdated',
     inputs: [
-      { name: 'id', type: 'uint256', indexed: false },
+      { name: 'id', type: 'uint256', indexed: true },
+      { name: 'initiator', type: 'address', indexed: true },
+      { name: 'landlord', type: 'address', indexed: true },
+      { name: 'oldHash', type: 'string', indexed: false },
+      { name: 'newHash', type: 'string', indexed: false },
+      { name: 'updatedAt', type: 'uint256', indexed: false }
+    ]
+  },
+  {
+    type: 'event',
+    name: 'WorkDetailsUpdated',
+    inputs: [
+      { name: 'id', type: 'uint256', indexed: true },
+      { name: 'initiator', type: 'address', indexed: true },
+      { name: 'landlord', type: 'address', indexed: true },
       { name: 'oldHash', type: 'string', indexed: false },
       { name: 'newHash', type: 'string', indexed: false },
       { name: 'updatedAt', type: 'uint256', indexed: false }

@@ -4,19 +4,16 @@ import { WagmiProvider } from 'wagmi'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 import { config } from "~/utils/blockchain/config";
-import { Bell, Settings } from 'lucide-react';
+import { Bell, LayoutDashboard, Settings } from 'lucide-react';
 import '@rainbow-me/rainbowkit/styles.css';
 import { ConnectWallet } from "~/components/ConnectWallet";
 import { Button } from "~/components/ui/Button";
 import { Logo } from "~/components/Logo";
+import { RoleSwitcher } from "~/components/RoleSwitcher";
 import { getUserFromSession, createUserSession } from "~/utils/session.server";
 import { db } from "~/utils/db.server";
 
 const queryClient = new QueryClient()
-
-const navigation = [
-  { name: 'Repair Requests', href: '/repair-requests' },
-];
 
 type LoaderData = {
   user: {
@@ -76,7 +73,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     
     // If user doesn't exist, redirect to register
     if (!isRegisterPage) {
-      throw redirect(`/register?address=${walletAddress}`);
+      throw redirect(`/app/register?address=${walletAddress}`);
     }
   }
 
@@ -93,6 +90,14 @@ export default function Layout() {
   const { user } = useLoaderData<typeof loader>();
   const location = useLocation();
   const navigate = useNavigate();
+
+  // Navigation items based on user role
+  const navigation = [
+    // Show repair requests to all authenticated users
+    ...(user ? [{ name: 'Repair Requests', href: '/app/repair-requests' }] : []),
+    // Show dashboard only to landlords
+    ...(user?.role === "LANDLORD" ? [{ name: 'Dashboard', href: '/app/dashboard' }] : []),
+  ];
 
   return (
     <WagmiProvider config={config}>
@@ -133,6 +138,16 @@ export default function Layout() {
                   <div className="flex items-center gap-2">
                     {user && (
                       <>
+                        {user.role === "LANDLORD" && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            className="hover:bg-white/[0.02]"
+                            onClick={() => navigate("/dashboard")}
+                          >
+                            <LayoutDashboard className="h-5 w-5" />
+                          </Button>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="icon"
@@ -148,6 +163,8 @@ export default function Layout() {
                         >
                           <Settings className="h-5 w-5" />
                         </Button>
+                        {/* Role Switcher - Development Only */}
+                        {user && <RoleSwitcher currentRole={user.role} />}
                         <div className="mx-2 h-5 w-px bg-white/[0.04]" />
                       </>
                     )}

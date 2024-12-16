@@ -16,14 +16,15 @@ export function useRepairRequest() {
 
   const createRepairRequest = async (
     propertyId: string,
-    descriptionHash: string
+    descriptionHash: string,
+    landlord: `0x${string}`
   ): Promise<BlockchainRepairRequestResult> => {
     try {
       const hash = await writeContractAsync({
         address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
         abi: RepairRequestContractABI,
         functionName: 'createRepairRequest',
-        args: [propertyId, descriptionHash],
+        args: [propertyId, descriptionHash, landlord],
       })
 
       // In a real implementation, you would get the ID from the transaction receipt
@@ -48,26 +49,59 @@ export function useRepairRequest() {
       address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
       abi: RepairRequestContractABI,
       functionName: 'updateRepairRequestStatus',
-      args: [requestId, status],
+      args: [requestId, BigInt(status)],
     })
   }
 
-  const updateDescriptionHash = async (
+  const updateDescription = async (
     requestId: bigint,
-    newDescriptionHash: string
+    descriptionHash: string
   ) => {
     return writeContractAsync({
       address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
       abi: RepairRequestContractABI,
-      functionName: 'updateDescriptionHash',
-      args: [requestId, newDescriptionHash],
+      functionName: 'updateDescription',
+      args: [requestId, descriptionHash],
+    })
+  }
+
+  const updateWorkDetails = async (
+    requestId: bigint,
+    workDetailsHash: string
+  ) => {
+    return writeContractAsync({
+      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
+      abi: RepairRequestContractABI,
+      functionName: 'updateWorkDetails',
+      args: [requestId, workDetailsHash],
+    })
+  }
+
+  const withdrawRequest = async (requestId: bigint) => {
+    return writeContractAsync({
+      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
+      abi: RepairRequestContractABI,
+      functionName: 'withdrawRepairRequest',
+      args: [requestId],
+    })
+  }
+
+  const approveWork = async (requestId: bigint, isAccepted: boolean) => {
+    return writeContractAsync({
+      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
+      abi: RepairRequestContractABI,
+      functionName: 'approveWork',
+      args: [requestId, isAccepted],
     })
   }
 
   return {
     createRepairRequest,
     updateStatus,
-    updateDescriptionHash,
+    updateDescription,
+    updateWorkDetails,
+    withdrawRequest,
+    approveWork,
     isPending,
     isSuccess,
     error
@@ -88,8 +122,10 @@ export function useRepairRequestRead(requestId?: bigint) {
   const result = data as unknown as {
     id: bigint
     initiator: `0x${string}`
+    landlord: `0x${string}`
     propertyId: string
     descriptionHash: string
+    workDetailsHash: string
     status: bigint
     createdAt: bigint
     updatedAt: bigint
@@ -98,8 +134,10 @@ export function useRepairRequestRead(requestId?: bigint) {
   const repairRequest: RepairRequest | undefined = result ? {
     id: result.id,
     initiator: result.initiator,
+    landlord: result.landlord,
     propertyId: result.propertyId,
     descriptionHash: result.descriptionHash,
+    workDetailsHash: result.workDetailsHash,
     status: Number(result.status) as RepairRequestStatusType,
     createdAt: result.createdAt,
     updatedAt: result.updatedAt,
@@ -117,17 +155,31 @@ export function useWatchRepairRequestEvents(callbacks: {
   onCreated?: (
     id: bigint,
     initiator: string,
+    landlord: string,
     propertyId: string,
     descriptionHash: string,
     createdAt: bigint
   ) => void,
-  onUpdated?: (
+  onStatusChanged?: (
     id: bigint,
-    status: RepairRequestStatusType,
+    initiator: string,
+    landlord: string,
+    oldStatus: RepairRequestStatusType,
+    newStatus: RepairRequestStatusType,
     updatedAt: bigint
   ) => void,
-  onDescriptionHashUpdated?: (
+  onDescriptionUpdated?: (
     id: bigint,
+    initiator: string,
+    landlord: string,
+    oldHash: string,
+    newHash: string,
+    updatedAt: bigint
+  ) => void,
+  onWorkDetailsUpdated?: (
+    id: bigint,
+    initiator: string,
+    landlord: string,
     oldHash: string,
     newHash: string,
     updatedAt: bigint
@@ -144,12 +196,14 @@ export function useWatchRepairRequestEvents(callbacks: {
           if (args && 
               args.id !== undefined && 
               args.initiator !== undefined && 
+              args.landlord !== undefined &&
               args.propertyId !== undefined && 
               args.descriptionHash !== undefined && 
               args.createdAt !== undefined) {
             callbacks.onCreated(
               args.id,
               args.initiator,
+              args.landlord,
               args.propertyId,
               args.descriptionHash,
               args.createdAt
@@ -163,18 +217,24 @@ export function useWatchRepairRequestEvents(callbacks: {
   useWatchContractEvent({
     address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
     abi: RepairRequestContractABI,
-    eventName: 'RepairRequestUpdated',
+    eventName: 'RepairRequestStatusChanged',
     onLogs: (logs) => {
-      if (callbacks.onUpdated) {
+      if (callbacks.onStatusChanged) {
         for (const log of logs) {
           const { args } = log
           if (args && 
               args.id !== undefined && 
-              args.status !== undefined && 
+              args.initiator !== undefined &&
+              args.landlord !== undefined &&
+              args.oldStatus !== undefined &&
+              args.newStatus !== undefined &&
               args.updatedAt !== undefined) {
-            callbacks.onUpdated(
+            callbacks.onStatusChanged(
               args.id,
-              Number(args.status) as RepairRequestStatusType,
+              args.initiator,
+              args.landlord,
+              Number(args.oldStatus) as RepairRequestStatusType,
+              Number(args.newStatus) as RepairRequestStatusType,
               args.updatedAt
             )
           }
@@ -186,18 +246,51 @@ export function useWatchRepairRequestEvents(callbacks: {
   useWatchContractEvent({
     address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
     abi: RepairRequestContractABI,
-    eventName: 'DescriptionHashUpdated',
+    eventName: 'DescriptionUpdated',
     onLogs: (logs) => {
-      if (callbacks.onDescriptionHashUpdated) {
+      if (callbacks.onDescriptionUpdated) {
         for (const log of logs) {
           const { args } = log
           if (args && 
               args.id !== undefined && 
+              args.initiator !== undefined &&
+              args.landlord !== undefined &&
               args.oldHash !== undefined && 
               args.newHash !== undefined && 
               args.updatedAt !== undefined) {
-            callbacks.onDescriptionHashUpdated(
+            callbacks.onDescriptionUpdated(
               args.id,
+              args.initiator,
+              args.landlord,
+              args.oldHash,
+              args.newHash,
+              args.updatedAt
+            )
+          }
+        }
+      }
+    }
+  })
+
+  useWatchContractEvent({
+    address: CONTRACT_ADDRESSES.REPAIR_REQUEST as `0x${string}`,
+    abi: RepairRequestContractABI,
+    eventName: 'WorkDetailsUpdated',
+    onLogs: (logs) => {
+      if (callbacks.onWorkDetailsUpdated) {
+        for (const log of logs) {
+          const { args } = log
+          if (args && 
+              args.id !== undefined && 
+              args.initiator !== undefined &&
+              args.landlord !== undefined &&
+              args.oldHash !== undefined && 
+              args.newHash !== undefined && 
+              args.updatedAt !== undefined) {
+            callbacks.onWorkDetailsUpdated(
+              args.id,
+              args.initiator,
+              args.landlord,
               args.oldHash,
               args.newHash,
               args.updatedAt

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useFetcher } from "@remix-run/react";
 import { cn } from "~/utils/cn";
 import { MapPin } from "lucide-react";
+import type { ReactNode } from "react";
 
 interface Prediction {
   place_id: string;
@@ -13,8 +14,21 @@ interface PlacesResponse {
   status: string;
 }
 
-export function PlacesAutocomplete() {
+interface PlacesAutocompleteProps {
+  onPlaceSelect?: (place: Prediction) => void;
+  leftIcon?: ReactNode;
+  placeholder?: string;
+  "aria-describedby"?: string;
+}
+
+export function PlacesAutocomplete({ 
+  onPlaceSelect, 
+  leftIcon = <MapPin className="h-5 w-5" />,
+  placeholder = "Search for a place...",
+  "aria-describedby": ariaDescribedby
+}: PlacesAutocompleteProps) {
   const [query, setQuery] = useState("");
+  const [selectedPlace, setSelectedPlace] = useState<Prediction | null>(null);
   const fetcher = useFetcher<PlacesResponse>();
   
   const predictions = fetcher.data?.predictions || [];
@@ -22,10 +36,17 @@ export function PlacesAutocomplete() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setQuery(value);
+    setSelectedPlace(null); // Clear selected place when input changes
     
     if (value.length > 2) {
       fetcher.load(`/api/places-autocomplete?query=${encodeURIComponent(value)}`);
     }
+  };
+
+  const handlePlaceSelect = (prediction: Prediction) => {
+    setQuery(prediction.description);
+    setSelectedPlace(prediction);
+    onPlaceSelect?.(prediction);
   };
 
   const baseStyles = "w-full transition-all duration-200";
@@ -51,14 +72,26 @@ export function PlacesAutocomplete() {
     <div className="relative w-full">
       <div className={containerStyles}>
         <div className={iconStyles}>
-          <MapPin className="h-5 w-5" />
+          {leftIcon}
         </div>
         <input
           type="text"
           value={query}
           onChange={handleInputChange}
-          placeholder="Search for a place..."
+          placeholder={placeholder}
           className={inputStyles}
+          aria-describedby={ariaDescribedby}
+        />
+        {/* Hidden inputs for form submission */}
+        <input 
+          type="hidden" 
+          name="address" 
+          value={selectedPlace?.description || query} 
+        />
+        <input 
+          type="hidden" 
+          name="placeId" 
+          value={selectedPlace?.place_id || ""} 
         />
       </div>
       
@@ -68,7 +101,7 @@ export function PlacesAutocomplete() {
           "top-[calc(100%+0.5rem)]",
           "rounded-xl overflow-hidden",
           "border border-purple-600/50",
-
+          "bg-[#0F0F0F]",
           "shadow-md animate-in fade-in-0 zoom-in-95"
         )}>
           <ul className={cn(
@@ -83,13 +116,10 @@ export function PlacesAutocomplete() {
                   "relative flex cursor-pointer select-none items-center",
                   "px-4 py-3",
                   "text-sm text-white/90",
-                  
+                  "hover:bg-purple-600/10",
                   "transition-colors",
-                  
                 )}
-                onClick={() => {
-                  setQuery(prediction.description);
-                }}
+                onClick={() => handlePlaceSelect(prediction)}
               >
                 {prediction.description}
               </li>

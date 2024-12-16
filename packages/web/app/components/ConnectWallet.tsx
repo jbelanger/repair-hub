@@ -1,28 +1,32 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useNavigate } from '@remix-run/react';
 import { Wallet2, ChevronDown, ExternalLink } from 'lucide-react'
-import { useEffect } from 'react'
-import { useAccount } from 'wagmi'
+import { useAccountEffect } from 'wagmi'
 
-interface ConnectWalletProps {
-  onConnect?: () => void
+interface ConnectWalletProps {  
+  variant?: "default" | "link";
+  alwaysShowConnect?: boolean;
 }
 
-export function ConnectWallet({ onConnect }: ConnectWalletProps) {
-  const { address, isConnected } = useAccount()
-
-  // Update URL with wallet address when it changes
-  useEffect(() => {
-    if (address && typeof window !== 'undefined') {
-      const url = new URL(window.location.href);
-      url.searchParams.set('address', address.toLowerCase());
-      window.history.replaceState({}, '', url.toString());
-      onConnect?.();
-    }
-  }, [address, onConnect]);
+export function ConnectWallet({ variant = "default", alwaysShowConnect = false }: ConnectWalletProps) {
+  const navigate = useNavigate();
+  
+  useAccountEffect({
+    onConnect({ address, connector, isReconnected }) {
+      console.log('Connected:', { address, connector, isReconnected });
+      if(!isReconnected)
+        navigate('/app');
+    },
+    onDisconnect() {
+      console.log('Disconnected');      
+      navigate('/');
+    },
+  });
 
   return (
     <ConnectButton.Custom>
       {({
+        
         account,
         chain,
         openAccountModal,
@@ -35,7 +39,19 @@ export function ConnectWallet({ onConnect }: ConnectWalletProps) {
           return null
         }
 
-        if (!account) {
+        // Always show connect button if alwaysShowConnect is true
+        if (!account || alwaysShowConnect) {
+          if (variant === "link") {
+            return (
+              <button
+                onClick={openConnectModal}
+                className="text-sm font-medium text-white/70 hover:text-white transition-colors"
+              >
+                Login
+              </button>
+            )
+          }
+          
           return (
             <button
               onClick={openConnectModal}
