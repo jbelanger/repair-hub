@@ -26,6 +26,8 @@ model User {
   propertyLeases   PropertyTenant[]
   // Repair requests initiated by this user
   initiatedRequests RepairRequest[] @relation("InitiatedRequests")
+  // Subscription if user is a landlord
+  subscription     Subscription?
 }
 
 model Property {
@@ -94,4 +96,37 @@ model RepairRequest {
   attachments    String    // IPFS hashes, comma-separated
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+// New models for subscription system
+
+model Plan {
+  id          String   @id @default(cuid())
+  name        String   @unique // "FREE", "STANDARD"
+  price       Float    // Monthly price in USD
+  yearlyPrice Float    // Yearly price in USD
+  maxProperties Int    // Maximum number of properties allowed
+  features    String   // JSON string of features
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @unique
+  plan      Plan     @relation(fields: [planId], references: [id])
+  planId    String
+  startDate DateTime @default(now())
+  endDate   DateTime
+  status    String   // "ACTIVE", "CANCELLED", "EXPIRED"
+  interval  String   // "MONTHLY", "YEARLY"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Payment related fields
+  stripeCustomerId String?
+  stripeSubscriptionId String?
 }
