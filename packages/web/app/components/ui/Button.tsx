@@ -86,44 +86,25 @@ export function LinkButton({
   disabled,
   ...props
 }: LinkButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center font-medium transition-all focus:outline-none disabled:opacity-50 disabled:pointer-events-none";
-  
-  const variants = {
-    primary: "bg-purple-600 hover:bg-purple-500 text-white rounded-full",
-    secondary: "bg-transparent border border-purple-600 text-purple-600 hover:bg-purple-600/5 rounded-full",
-    dark: "bg-gray-800 hover:bg-gray-700 text-white rounded-full",
-    blue: "bg-blue-500 hover:bg-blue-400 text-white rounded-full",
-    ghost: "bg-transparent hover:bg-white/[0.02] text-white/70 hover:text-white rounded-lg",
-    danger: "bg-red-600 hover:bg-red-500 text-white rounded-full",
-  };
-
-  const sizes = {
-    sm: "h-9 px-4 text-sm",
-    md: "h-10 px-5 text-base",
-    lg: "h-12 px-6 text-base",
-    icon: "h-9 w-9",
-  };
-
+  // Use the same pattern that works in the properties route
   return (
-    <button type="button" className="contents">
-      <Link
-        to={to}
-        prefetch={prefetch}
-        className={cn(
-          baseStyles,
-          variants[variant],
-          sizes[size],
-          disabled && "opacity-50 pointer-events-none",
-          className
-        )}
-        {...props}
+    <Link
+      to={to}
+      prefetch={prefetch}
+      className="contents"
+      {...props}
+    >
+      <Button
+        variant={variant}
+        size={size}
+        className={className}
+        disabled={disabled}
+        leftIcon={leftIcon}
+        rightIcon={rightIcon}
+        type="button"
       >
-        <span className="flex items-center gap-2">
-          {leftIcon}
-          {children}
-          {rightIcon}
-        </span>
-      </Link>
-    </button>
+        {children}
+      </Button>
+    </Link>
   );
 }

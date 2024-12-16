@@ -2,39 +2,47 @@ import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from
 import { Form, useActionData, useLoaderData } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
-import { Mail, Calendar } from "lucide-react";
+import { Mail, Calendar, Building2 } from "lucide-react";
 import { Input } from "~/components/ui/Input";
 import { Card } from "~/components/ui/Card";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { FormField, FormSection, FormActions, FormError, FormGrid } from "~/components/ui/Form";
-import { useToast, ToastManager } from "~/components/ui/Toast";
-import { NoAccess } from "~/components/ui/EmptyState";
+import { Select } from "~/components/ui/Select";
+import { ToastManager, useToast } from "~/components/ui/Toast";
 import { addDays } from "date-fns";
 
 type LoaderData = {
-  property: {
+  properties: Array<{
     id: string;
     address: string;
-  };
+  }>;
+  selectedPropertyId?: string;
 };
 
 type ActionData = {
   success?: boolean;
   error?: string;
   fieldErrors?: {
+    propertyId?: string;
     email?: string;
     startDate?: string;
     endDate?: string;
   };
 };
 
-export async function loader({ request, params }: LoaderFunctionArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
   
-  const property = await db.property.findUnique({
+  if (user.role !== "LANDLORD") {
+    throw new Response("Not authorized", { status: 403 });
+  }
+
+  const url = new URL(request.url);
+  const selectedPropertyId = url.searchParams.get("propertyId") || undefined;
+
+  const properties = await db.property.findMany({
     where: {
-      id: params.id,
-      landlordId: user.id // Ensure the property belongs to this landlord
+      landlordId: user.id
     },
     select: {
       id: true,
@@ -42,36 +50,34 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     }
   });
 
-  if (!property) {
-    throw new Response("Property not found", { status: 404 });
+  // Verify selected property belongs to landlord
+  if (selectedPropertyId) {
+    const propertyExists = properties.some(p => p.id === selectedPropertyId);
+    if (!propertyExists) {
+      throw new Response("Property not found", { status: 404 });
+    }
   }
 
-  return json<LoaderData>({ property });
+  return json<LoaderData>({ properties, selectedPropertyId });
 }
 
-export async function action({ request, params }: ActionFunctionArgs) {
+export async function action({ request }: ActionFunctionArgs) {
   const user = await requireUser(request);
   
-  const property = await db.property.findUnique({
-    where: {
-      id: params.id,
-      landlordId: user.id
-    }
-  });
-
-  if (!property) {
-    return json<ActionData>(
-      { success: false, error: "Property not found" },
-      { status: 404 }
-    );
+  if (user.role !== "LANDLORD") {
+    throw new Response("Not authorized", { status: 403 });
   }
 
   const formData = await request.formData();
+  const propertyId = formData.get("propertyId") as string;
   const email = formData.get("email") as string;
   const startDate = formData.get("startDate") as string;
   const endDate = formData.get("endDate") as string;
 
   const fieldErrors: ActionData["fieldErrors"] = {};
+  if (!propertyId) {
+    fieldErrors.propertyId = "Property is required";
+  }
   if (!email || !email.includes("@")) {
     fieldErrors.email = "Valid email is required";
   }
@@ -89,6 +95,21 @@ export async function action({ request, params }: ActionFunctionArgs) {
     return json<ActionData>({ fieldErrors }, { status: 400 });
   }
 
+  // Verify property belongs to landlord
+  const property = await db.property.findUnique({
+    where: {
+      id: propertyId,
+      landlordId: user.id
+    }
+  });
+
+  if (!property) {
+    return json<ActionData>(
+      { success: false, error: "Property not found" },
+      { status: 404 }
+    );
+  }
+
   try {
     // Create invitation that expires in 7 days
     await db.tenantInvitation.create({
@@ -102,7 +123,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
     });
 
-    return redirect(`/dashboard/properties/${property.id}`, {
+    return redirect("/dashboard/tenants", {
       headers: {
         "X-Toast": "Invitation sent successfully"
       }
@@ -117,7 +138,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function InviteTenant() {
-  const { property } = useLoaderData<typeof loader>();
+  const { properties, selectedPropertyId } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const { toasts, addToast, removeToast } = useToast();
 
@@ -125,8 +146,8 @@ export default function InviteTenant() {
     <div className="p-6">
       <PageHeader
         title="Invite Tenant"
-        subtitle={property.address}
-        backTo={`/dashboard/properties/${property.id}`}
+        subtitle="Send an invitation to a new tenant"
+        backTo="/dashboard/tenants"
       />
 
       <div className="max-w-2xl">
@@ -141,6 +162,24 @@ export default function InviteTenant() {
         >
           <Form method="post">
             <FormSection>
+              <FormField
+                label="Property"
+                error={actionData?.fieldErrors?.propertyId}
+              >
+                <Select
+                  name="propertyId"
+                  leftIcon={<Building2 className="h-5 w-5" />}
+                  defaultValue={selectedPropertyId}
+                >
+                  <option value="">Select a property</option>
+                  {properties.map((property) => (
+                    <option key={property.id} value={property.id}>
+                      {property.address}
+                    </option>
+                  ))}
+                </Select>
+              </FormField>
+
               <FormField
                 label="Tenant Email"
                 error={actionData?.fieldErrors?.email}
@@ -181,7 +220,7 @@ export default function InviteTenant() {
             <FormError error={actionData?.error} />
 
             <FormActions
-              cancelHref={`/dashboard/properties/${property.id}`}
+              cancelHref="/dashboard/tenants"
               submitLabel="Send Invitation"
             />
           </Form>

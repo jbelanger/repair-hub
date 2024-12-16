@@ -77,7 +77,7 @@ export default function RepairRequests() {
   const { toasts, addToast, removeToast } = useToast();
   const hasRepairRequests = repairRequests.length > 0;
 
-  const createRequestPath = "create";
+  const createRequestPath = "/dashboard/repair-requests/create";
 
   return (
     <div className="p-6 space-y-6">
@@ -93,12 +93,12 @@ export default function RepairRequests() {
             }
           </p>
         </div>
-        {user.role === 'TENANT' && (
+        {user.role === 'TENANT' && hasRepairRequests && (
           <LinkButton
             to={createRequestPath}
             leftIcon={<Plus className="h-5 w-5" />}
           >
-            {hasRepairRequests ? "New Request" : "Submit New Request"}
+            New Request
           </LinkButton>
         )}
       </div>

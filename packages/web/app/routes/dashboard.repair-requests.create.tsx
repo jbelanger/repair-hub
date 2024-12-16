@@ -16,6 +16,7 @@ import { EmptyState } from "~/components/ui/EmptyState";
 import { useToast, ToastManager } from "~/components/ui/Toast";
 import { Skeleton } from "~/components/ui/LoadingState";
 import { type Address, type HexString, toHexString, hashToHex } from "~/utils/blockchain/types";
+import { hashToHexSync } from "~/utils/blockchain/hash.server";
 
 type ActionData = {
   success?: boolean;
@@ -185,8 +186,8 @@ export async function action({ request }: ActionFunctionArgs) {
         );
       }
 
-      // Create description hash for blockchain verification
-      const descriptionHash = hashToHex(description);
+      // Create description hash for blockchain verification using server-side function
+      const descriptionHash = hashToHexSync(description);
 
       await db.repairRequest.create({
         data: {
@@ -267,7 +268,8 @@ export default function CreateRepairRequest() {
         if (!selectedProperty) {
           throw new Error("Selected property not found");
         }
-        const descriptionHash = hashToHex(description);
+        // Use the async browser-side hash function for client-side operations
+        const descriptionHash = await hashToHex(description);
         const blockchainPropertyId = toHexString(propertyId);
         await createRepairRequest(blockchainPropertyId, descriptionHash, selectedProperty.landlordAddress);
       } catch (error) {
@@ -280,41 +282,12 @@ export default function CreateRepairRequest() {
     }
   };
 
-  // Handle successful creation
-  useEffect(() => {
-    if (actionData?.success && actionData.stage === 'create') {
-      setShowSuccess(true);
-      const timer = setTimeout(() => {
-        setIsExiting(true);
-        setTimeout(() => {
-          navigate("..");
-        }, 500); // Wait for exit animation
-      }, 2000); // Show success for 2 seconds
-      return () => clearTimeout(timer);
-    }
-  }, [actionData?.success, actionData?.stage, navigate]);
-
-  // Show success screen
-  if (showSuccess) {
-    return (
-      <EmptyState
-        icon={FileText}
-        title="Success!"
-        description="Your repair request has been created"
-        className={cn(
-          "fixed inset-0 flex items-center justify-center bg-background/95 backdrop-blur-sm transition-opacity duration-500",
-          isExiting ? "opacity-0" : "opacity-100"
-        )}
-      />
-    );
-  }
-
   return (
     <div className="p-6">
       <PageHeader
         title="Create Repair Request"
         subtitle="Submit a new repair request for your property"
-        backTo=".."
+        backTo="/dashboard/repair-requests"
       />
 
       {properties.length === 0 ? (

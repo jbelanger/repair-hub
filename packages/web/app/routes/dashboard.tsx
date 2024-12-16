@@ -4,10 +4,11 @@ import { ConnectWallet } from "~/components/ConnectWallet";
 import { RoleSwitcher } from "~/components/RoleSwitcher";
 import { requireUser } from "~/utils/session.server";
 import { Search } from "~/components/ui/Search";
-import { Bell, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 import { Sidebar } from "~/components/ui/Sidebar";
 import { db } from "~/utils/db.server";
 import { Logo } from "~/components/Logo";
+import { Notifications } from "~/components/Notifications";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -16,9 +17,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return redirect("/");
   }
 
-
   // Get counts for the navigation badges
-  const [propertiesCount, pendingRepairsCount, activeTenantsCount] = await Promise.all([
+  const [propertiesCount, pendingRepairsCount, activeTenantsCount, pendingInvitations, notifications] = await Promise.all([
     user.role === "LANDLORD" 
       ? db.property.count({ where: { landlordId: user.id } })
       : 0,
@@ -42,7 +42,34 @@ export async function loader({ request }: LoaderFunctionArgs) {
             status: "ACTIVE"
           }
         })
-      : 0
+      : 0,
+    user.role === "TENANT"
+      ? db.tenantInvitation.findMany({
+          where: {
+            email: user.email,
+            status: "PENDING",
+            expiresAt: {
+              gt: new Date()
+            }
+          },
+          include: {
+            property: {
+              select: {
+                address: true
+              }
+            }
+          }
+        })
+      : [],
+    db.notification.findMany({
+      where: {
+        userId: user.id,
+        read: false
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    })
   ]);
 
   return json({ 
@@ -52,12 +79,28 @@ export async function loader({ request }: LoaderFunctionArgs) {
       properties: propertiesCount,
       repairs: pendingRepairsCount,
       tenants: activeTenantsCount
+    },
+    notifications: {
+      invitations: pendingInvitations.map(invitation => ({
+        id: invitation.id,
+        propertyAddress: invitation.property.address,
+        startDate: invitation.startDate.toISOString(),
+        endDate: invitation.endDate.toISOString()
+      })),
+      general: notifications.map(notification => ({
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        createdAt: notification.createdAt.toISOString(),
+        read: notification.read
+      }))
     }
   });
 }
 
 export default function AppLayout() {
-  const { currentRole, user, counts } = useLoaderData<typeof loader>();
+  const { currentRole, user, counts, notifications } = useLoaderData<typeof loader>();
 
   return (
     <div className="min-h-screen">
@@ -97,7 +140,7 @@ export default function AppLayout() {
           {/* Left: Logo and App Name */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2">
-            <Logo logoSrc="/logo5.svg" size="xl" className="py-1" />
+              <Logo logoSrc="/logo5.svg" size="xl" className="py-1" />
             </div>
           </div>
 
@@ -109,12 +152,10 @@ export default function AppLayout() {
           {/* Right: Actions */}
           <div className="flex items-center gap-4">
             <RoleSwitcher currentRole={currentRole} />
-            <button
-              className="p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)]"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              <Bell className="h-5 w-5" />
-            </button>
+            <Notifications 
+              invitations={notifications.invitations} 
+              notifications={notifications.general}
+            />
             <button
               className="p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)]"
               style={{ color: 'var(--color-text-secondary)' }}

@@ -56,7 +56,7 @@ export async function requireUser(request: Request) {
   
   if (!user) {
     // Instead of redirecting with a query parameter, redirect to register
-    throw redirect("/app/register");
+    throw redirect("/register");
   }
   
   return user;
@@ -66,7 +66,7 @@ export async function logout(request: Request) {
   const session = await sessionStorage.getSession(
     request.headers.get("Cookie")
   );
-  return redirect("/app", {
+  return redirect("/dashboard", {
     headers: {
       "Set-Cookie": await sessionStorage.destroySession(session),
     },

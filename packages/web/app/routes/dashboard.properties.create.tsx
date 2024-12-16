@@ -1,5 +1,5 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
-import { useActionData } from "@remix-run/react";
+import { useActionData, Form } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
 import { Building2 } from "lucide-react";
@@ -105,24 +105,26 @@ export default function CreateProperty() {
             iconBackground: true
           }}
         >
-          <FormSection>
-            <FormField
-              label="Property Address"
-              error={actionData?.fieldErrors?.address}
-            >
-              <PlacesAutocomplete
-                placeholder="Start typing the address..."
-                aria-describedby="address-error"
-              />
-            </FormField>
-          </FormSection>
+          <Form method="post">
+            <FormSection>
+              <FormField
+                label="Property Address"
+                error={actionData?.fieldErrors?.address}
+              >
+                <PlacesAutocomplete
+                  placeholder="Start typing the address..."
+                  aria-describedby="address-error"
+                />
+              </FormField>
+            </FormSection>
 
-          <FormError error={actionData?.error} />
+            <FormError error={actionData?.error} />
 
-          <FormActions
-            cancelHref="/dashboard/properties"
-            submitLabel="Create Property"
-          />
+            <FormActions
+              cancelHref="/dashboard/properties"
+              submitLabel="Create Property"
+            />
+          </Form>
         </Card>
       </div>
 

@@ -1,6 +1,6 @@
 import { type ReactNode } from "react";
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { Outlet, useLoaderData } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
 import { Mail, Plus, Users, Wrench } from "lucide-react";
@@ -148,6 +148,7 @@ export default function PropertyDetails(): ReactNode {
 
   return (
     <div className="p-6 space-y-6">
+      <Outlet />
       <PageHeader
         title={property.address}
         subtitle="Property Details"
@@ -155,7 +156,7 @@ export default function PropertyDetails(): ReactNode {
         action={{
           label: "Invite Tenant",
           icon: <Plus className="h-5 w-5" />,
-          href: "invite"
+          href: `/dashboard/tenants/invite?propertyId=${property.id}`
         }}
       />
 
@@ -197,7 +198,7 @@ export default function PropertyDetails(): ReactNode {
               action: {
                 label: "Invite Tenant",
                 icon: <Plus className="h-5 w-5" />,
-                href: "invite"
+                href: `/dashboard/tenants/invite?propertyId=${property.id}`
               }
             }}
             renderItem={(lease) => (

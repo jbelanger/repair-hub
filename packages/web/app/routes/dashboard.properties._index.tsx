@@ -1,5 +1,5 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useSearchParams } from "@remix-run/react";
+import { useLoaderData, useSearchParams, Link } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
 import { Building2, Plus } from "lucide-react";
@@ -185,48 +185,50 @@ export default function DashboardPropertiesIndex() {
             } : undefined
           }
           renderItem={(property) => (
-            <Card
-              variant="property"
-              header={{
-                icon: <Building2 className="h-5 w-5" />,
-                iconBackground: true,
-                title: property.address,
-                subtitle: `${property._count.tenantLeases} ${property._count.tenantLeases === 1 ? 'tenant' : 'tenants'}`
-              }}
-            >
-              <div className="mb-6">
-                <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                  Added {new Date(property.createdAt).toLocaleDateString()}
-                </p>
-              </div>
+            <Link to={`/dashboard/properties/${property.id}`} className="block hover:no-underline">
+              <Card
+                variant="property"
+                header={{
+                  icon: <Building2 className="h-5 w-5" />,
+                  iconBackground: true,
+                  title: property.address,
+                  subtitle: `${property._count.tenantLeases} ${property._count.tenantLeases === 1 ? 'tenant' : 'tenants'}`
+                }}
+              >
+                <div className="mb-6">
+                  <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                    Added {new Date(property.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="text-center">
-                  <div className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                    {property.tenantLeases.length}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                      {property.tenantLeases.length}
+                    </div>
+                    <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                      Active Tenants
+                    </div>
                   </div>
-                  <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                    Active Tenants
+                  <div className="text-center">
+                    <div className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                      {property.invitations.length}
+                    </div>
+                    <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                      Pending Invites
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                      {property.repairs.length}
+                    </div>
+                    <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                      Open Repairs
+                    </div>
                   </div>
                 </div>
-                <div className="text-center">
-                  <div className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                    {property.invitations.length}
-                  </div>
-                  <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                    Pending Invites
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-2xl font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-                    {property.repairs.length}
-                  </div>
-                  <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                    Open Repairs
-                  </div>
-                </div>
-              </div>
-            </Card>
+              </Card>
+            </Link>
           )}
         />
       )}

@@ -1,14 +1,17 @@
-import { createHash } from 'crypto';
-
 export type HexString = `0x${string}`;
 
 export function toHexString(value: string): HexString {
   return value.startsWith('0x') ? value as HexString : `0x${value}` as HexString;
 }
 
-export function hashToHex(value: string): HexString {
-  const hash = createHash('sha256').update(value).digest('hex');
-  return toHexString(hash);
+export async function hashToHex(value: string): Promise<HexString> {
+  // Use Web Crypto API for browser-safe hashing
+  const encoder = new TextEncoder();
+  const data = encoder.encode(value);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return toHexString(hashHex);
 }
 
 // Common blockchain types
