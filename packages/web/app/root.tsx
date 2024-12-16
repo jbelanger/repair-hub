@@ -6,8 +6,14 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 import type { LinksFunction } from "@remix-run/node";
+import { WagmiProvider } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
+import { config } from "~/utils/blockchain/config";
 
 import "./tailwind.css";
+
+const queryClient = new QueryClient();
 
 export const links: LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -70,5 +76,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  return (
+  <WagmiProvider config={config}>
+  <QueryClientProvider client={queryClient}>
+    <RainbowKitProvider theme={darkTheme()}>
+      <Outlet />
+      </RainbowKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>);
 }
