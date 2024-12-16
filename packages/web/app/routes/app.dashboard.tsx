@@ -50,34 +50,40 @@ export default function Dashboard() {
 
   const navigation = [
     {
-      name: "Profile",
-      to: "/dashboard/profile",
+      name: "Overview",
+      to: "/app/dashboard",
       icon: Settings,
-      current: location.pathname === "/dashboard/profile"
+      current: location.pathname === "/app/dashboard"
+    },
+    {
+      name: "Profile",
+      to: "/app/dashboard/profile",
+      icon: Settings,
+      current: location.pathname === "/app/dashboard/profile"
     },
     ...(user.role === "LANDLORD" ? [
       {
         name: "Properties",
-        to: "/dashboard/properties",
+        to: "/app/dashboard/properties",
         icon: Building2,
         count: propertiesCount,
-        current: location.pathname.startsWith("/dashboard/properties")
+        current: location.pathname.startsWith("/app/dashboard/properties")
       }
     ] : []),
     {
       name: "Repair Requests",
-      to: "/dashboard/repairs",
+      to: "/app/dashboard/repairs",
       icon: Wrench,
       count: pendingRepairsCount,
-      current: location.pathname.startsWith("/dashboard/repairs")
+      current: location.pathname.startsWith("/app/dashboard/repairs")
     },
     ...(user.role === "LANDLORD" ? [
       {
         name: "Tenants",
-        to: "/dashboard/tenants",
+        to: "/app/dashboard/tenants",
         icon: Users,
         count: activeTenantsCount,
-        current: location.pathname === "/dashboard/tenants"
+        current: location.pathname === "/app/dashboard/tenants"
       }
     ] : [])
   ];
