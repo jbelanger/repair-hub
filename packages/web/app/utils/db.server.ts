@@ -20,10 +20,11 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // Property Management
-export async function createProperty(landlordId: string, address: string) {
+export async function createProperty(landlordId: string, address: string, placeId: string) {
   return db.property.create({
     data: {
       address,
+      placeId,
       landlordId,
     },
   });
@@ -33,7 +34,7 @@ export async function getLandlordProperties(landlordId: string) {
   return db.property.findMany({
     where: { landlordId },
     include: {
-      PropertyTenant: {
+      tenantLeases: {
         include: {
           tenant: {
             select: {
@@ -44,7 +45,7 @@ export async function getLandlordProperties(landlordId: string) {
           },
         },
       },
-      TenantInvitation: {
+      invitations: {
         where: {
           status: "PENDING",
         },
@@ -63,7 +64,7 @@ export async function createTenantInvitation(
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7); // Invitation expires in 7 days
 
-  return db.TenantInvitation.create({
+  return db.tenantInvitation.create({
     data: {
       propertyId,
       email,
@@ -76,7 +77,7 @@ export async function createTenantInvitation(
 }
 
 export async function getPendingInvitationsByEmail(email: string) {
-  return db.TenantInvitation.findMany({
+  return db.tenantInvitation.findMany({
     where: {
       email,
       status: "PENDING",
@@ -100,7 +101,7 @@ export async function getPendingInvitationsByEmail(email: string) {
 }
 
 export async function acceptInvitation(invitationId: string, tenantId: string) {
-  const invitation = await db.TenantInvitation.findUnique({
+  const invitation = await db.tenantInvitation.findUnique({
     where: { id: invitationId },
   });
 
@@ -109,7 +110,7 @@ export async function acceptInvitation(invitationId: string, tenantId: string) {
   }
 
   // Create property-tenant relationship (lease)
-  const lease = await db.PropertyTenant.create({
+  const lease = await db.propertyTenant.create({
     data: {
       propertyId: invitation.propertyId,
       tenantId,
@@ -120,7 +121,7 @@ export async function acceptInvitation(invitationId: string, tenantId: string) {
   });
 
   // Update invitation status
-  await db.TenantInvitation.update({
+  await db.tenantInvitation.update({
     where: { id: invitationId },
     data: { status: "ACCEPTED" },
   });
@@ -130,7 +131,7 @@ export async function acceptInvitation(invitationId: string, tenantId: string) {
 
 // Lease Management
 export async function getActiveLease(tenantId: string, propertyId: string) {
-  return db.PropertyTenant.findFirst({
+  return db.propertyTenant.findFirst({
     where: {
       tenantId,
       propertyId,
@@ -143,7 +144,7 @@ export async function getActiveLease(tenantId: string, propertyId: string) {
 }
 
 export async function getActiveLeasesByTenant(tenantId: string) {
-  return db.PropertyTenant.findMany({
+  return db.propertyTenant.findMany({
     where: {
       tenantId,
       status: "ACTIVE",
@@ -168,7 +169,7 @@ export async function getActiveLeasesByTenant(tenantId: string) {
 }
 
 export async function terminateLease(leaseId: string) {
-  return db.PropertyTenant.update({
+  return db.propertyTenant.update({
     where: { id: leaseId },
     data: { status: "TERMINATED" },
   });
@@ -193,6 +194,166 @@ export async function getPropertyWithLandlord(propertyId: string) {
           address: true, // Ethereum address
         },
       },
+    },
+  });
+}
+
+// Repair Request Management
+
+// Convert blockchain status to database status
+function blockchainToDbStatus(status: number): string {
+  const statusMap: Record<number, string> = {
+    0: "PENDING",
+    1: "IN_PROGRESS",
+    2: "COMPLETED",
+    3: "ACCEPTED",
+    4: "REFUSED",
+    5: "REJECTED",
+    6: "CANCELLED"
+  };
+  return statusMap[status] || "PENDING";
+}
+
+// Create a new repair request
+export async function createRepairRequest({
+  id,
+  initiatorId,
+  propertyId,
+  leaseId,
+  description,
+  descriptionHash,
+  urgency,
+  attachments = "",
+}: {
+  id: string;
+  initiatorId: string;
+  propertyId: string;
+  leaseId: string;
+  description: string;
+  descriptionHash: string;
+  urgency: string;
+  attachments?: string;
+}) {
+  return db.repairRequest.create({
+    data: {
+      id,
+      initiatorId,
+      propertyId,
+      leaseId,
+      description,
+      descriptionHash,
+      urgency,
+      attachments,
+      status: "PENDING",
+      workDetails: "",
+      workDetailsHash: "",
+    },
+  });
+}
+
+// Update repair request status
+export async function updateRepairRequestStatus(id: string, status: number) {
+  return db.repairRequest.update({
+    where: { id },
+    data: {
+      status: blockchainToDbStatus(status),
+    },
+  });
+}
+
+// Update work details
+export async function updateWorkDetails(id: string, workDetails: string, workDetailsHash: string) {
+  return db.repairRequest.update({
+    where: { id },
+    data: {
+      workDetails,
+      workDetailsHash,
+    },
+  });
+}
+
+// Update description
+export async function updateDescription(id: string, description: string, descriptionHash: string) {
+  return db.repairRequest.update({
+    where: { id },
+    data: {
+      description,
+      descriptionHash,
+    },
+  });
+}
+
+// Get repair request by ID with all related data
+export async function getRepairRequest(id: string) {
+  return db.repairRequest.findUnique({
+    where: { id },
+    include: {
+      initiator: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          address: true,
+        },
+      },
+      property: {
+        include: {
+          landlord: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              address: true,
+            },
+          },
+        },
+      },
+      lease: true,
+    },
+  });
+}
+
+// Get repair requests for a property
+export async function getPropertyRepairRequests(propertyId: string) {
+  return db.repairRequest.findMany({
+    where: { propertyId },
+    include: {
+      initiator: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      lease: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+}
+
+// Get repair requests initiated by a user
+export async function getUserRepairRequests(userId: string) {
+  return db.repairRequest.findMany({
+    where: { initiatorId: userId },
+    include: {
+      property: {
+        include: {
+          landlord: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              address: true,
+            },
+          },
+        },
+      },
+      lease: true,
+    },
+    orderBy: {
+      createdAt: 'desc',
     },
   });
 }

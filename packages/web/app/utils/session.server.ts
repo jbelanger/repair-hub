@@ -43,6 +43,8 @@ export async function getUserFromSession(request: Request) {
       address: true,
       role: true,
       name: true,
+      email: true,
+      phone: true,
     },
   });
 

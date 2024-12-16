@@ -5,7 +5,7 @@ import { db } from "~/utils/db.server";
 import { Input } from "~/components/ui/Input";
 import { Select } from "~/components/ui/Select";
 import { Button } from "~/components/ui/Button";
-import { User, Mail, Phone, MapPin } from "lucide-react";
+import { User, Mail, Phone } from "lucide-react";
 import { useState } from "react";
 import { PrismaClientKnownRequestError } from "@prisma/client/runtime/library";
 import { createUserSession, getUserFromSession } from "~/utils/session.server";
@@ -53,10 +53,9 @@ export async function action({ request }: ActionFunctionArgs) {
   const email = formData.get("email") as string;
   const role = formData.get("role") as string;
   const phone = formData.get("phone") as string;
-  const propertyLocation = formData.get("propertyLocation") as string;
   const address = (formData.get("address") as string).toLowerCase();
 
-  if (!name || !email || !role || !propertyLocation || !address) {
+  if (!name || !email || !role || !address) {
     return json<ActionData>(
       { success: false, error: "All fields except phone are required" },
       { status: 400 }
@@ -75,38 +74,10 @@ export async function action({ request }: ActionFunctionArgs) {
       },
     });
 
-    // Handle property creation based on role
-    if (role === "LANDLORD") {
-      await db.property.create({
-        data: {
-          address: propertyLocation,
-          landlord: {
-            connect: {
-              id: user.id
-            }
-          }
-        },
-      });
-    } else if (role === "TENANT") {
-      await db.property.create({
-        data: {
-          address: propertyLocation,
-          tenants: {
-            connect: {
-              id: user.id
-            }
-          },
-          landlord: {
-            connect: {
-              id: user.id // Temporary: connecting to self as landlord
-            }
-          }
-        },
-      });
-    }
-
-    // Create a session for the new user
-    return createUserSession(user.id, "/");
+    // Create a session and redirect based on role
+    // Landlords go to property creation, tenants go to dashboard
+    const redirectTo = role === "LANDLORD" ? "/properties/create" : "/";
+    return createUserSession(user.id, redirectTo);
   } catch (error) {
     console.error("Registration error:", error);
     
@@ -206,15 +177,6 @@ export default function Register() {
               id="phone"
               placeholder="Phone Number (Optional)"
               leftIcon={<Phone className="h-5 w-5" />}
-            />
-
-            <Input
-              type="text"
-              name="propertyLocation"
-              id="propertyLocation"
-              placeholder="Property Address"
-              required
-              leftIcon={<MapPin className="h-5 w-5" />}
             />
 
             <input type="hidden" name="address" value={address?.toLowerCase()} />
