@@ -1,10 +1,14 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
-import { Form, Link, useActionData } from "@remix-run/react";
+import { useActionData } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
-import { Button } from "~/components/ui/Button";
-import { ArrowLeft } from "lucide-react";
+import { Building2 } from "lucide-react";
 import { PlacesAutocomplete } from "~/components/PlacesAutocomplete";
+import { Card } from "~/components/ui/Card";
+import { PageHeader } from "~/components/ui/PageHeader";
+import { FormField, FormSection, FormActions, FormError } from "~/components/ui/Form";
+import { useToast, ToastManager } from "~/components/ui/Toast";
+import { NoAccess } from "~/components/ui/EmptyState";
 
 type ActionData = {
   success?: boolean;
@@ -20,10 +24,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   
   // Only landlords can create properties
   if (user.role !== "LANDLORD") {
-    return redirect("/dashboard");
+    return json({ user });
   }
 
-  return json({});
+  return json({ user });
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -74,72 +78,55 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function CreateProperty() {
   const actionData = useActionData<typeof action>();
+  const { toasts, addToast, removeToast } = useToast();
+
+  // Show access denied for non-landlords
+  if (actionData?.error === "Only landlords can create properties") {
+    return (
+      <NoAccess message="Only landlords can create properties" />
+    );
+  }
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-8">
-        <Link to="/dashboard/properties">
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </Link>
-        <div>
-          <h2 className="text-2xl font-bold text-white">
-            Add Property
-          </h2>
-          <p className="mt-1 text-white/70">
-            Enter the property address to get started
-          </p>
-        </div>
-      </div>
+    <div className="p-6">
+      <PageHeader
+        title="Add Property"
+        subtitle="Enter the property address to get started"
+        backTo="/dashboard/properties"
+      />
 
       <div className="max-w-2xl">
-        <Form method="post" className="space-y-6">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="address" className="block text-sm font-medium text-white/70">
-                Property Address
-              </label>
+        <Card
+          accent="purple"
+          header={{
+            title: "Property Details",
+            subtitle: "Add a new property to your portfolio",
+            icon: <Building2 className="h-5 w-5" />,
+            iconBackground: true
+          }}
+        >
+          <FormSection>
+            <FormField
+              label="Property Address"
+              error={actionData?.fieldErrors?.address}
+            >
               <PlacesAutocomplete
                 placeholder="Start typing the address..."
                 aria-describedby="address-error"
               />
-              {actionData?.fieldErrors?.address && (
-                <p className="text-sm text-red-500" id="address-error">
-                  {actionData.fieldErrors.address}
-                </p>
-              )}
-            </div>
-          </div>
+            </FormField>
+          </FormSection>
 
-          {actionData?.error && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-red-200">
-              {actionData.error}
-            </div>
-          )}
+          <FormError error={actionData?.error} />
 
-          <div className="flex gap-4 pt-4">
-            <Link to="/dashboard/properties" className="flex-1">
-              <Button
-                type="button"
-                variant="secondary"
-                size="lg"
-                className="w-full"
-              >
-                Cancel
-              </Button>
-            </Link>
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="flex-1"
-            >
-              Create Property
-            </Button>
-          </div>
-        </Form>
+          <FormActions
+            cancelHref="/dashboard/properties"
+            submitLabel="Create Property"
+          />
+        </Card>
       </div>
+
+      <ToastManager toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

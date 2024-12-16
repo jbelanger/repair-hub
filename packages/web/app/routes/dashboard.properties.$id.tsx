@@ -1,11 +1,66 @@
 import { type ReactNode } from "react";
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { Link, useLoaderData } from "@remix-run/react";
+import { useLoaderData } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
-import { Button } from "~/components/ui/Button";
-import { ArrowLeft, Building2, Mail, Plus, Users, Wrench } from "lucide-react";
+import { Mail, Plus, Users, Wrench } from "lucide-react";
 import { DashboardCard } from "~/components/ui/DashboardCard";
+import { Card } from "~/components/ui/Card";
+import { PageHeader } from "~/components/ui/PageHeader";
+import { EmptyState } from "~/components/ui/EmptyState";
+import { DataList } from "~/components/ui/DataGrid";
+import { RepairStatus } from "~/components/ui/StatusBadge";
+import { Button, LinkButton } from "~/components/ui/Button";
+import { useToast, ToastManager } from "~/components/ui/Toast";
+import { ConfirmModal } from "~/components/ui/Modal";
+import { useState } from "react";
+
+type TenantLease = {
+  id: string;
+  tenant: {
+    id: string;
+    name: string;
+    email: string;
+  };
+};
+
+type RepairRequest = {
+  id: string;
+  status: string;
+  initiator: {
+    name: string;
+  };
+};
+
+type DatabaseInvitation = {
+  id: string;
+  email: string;
+  expiresAt: Date;
+  status: string;
+  propertyId: string;
+  startDate: Date;
+  endDate: Date;
+};
+
+type Invitation = {
+  id: string;
+  email: string;
+  expiresAt: string;
+  status: string;
+  propertyId: string;
+  startDate: string;
+  endDate: string;
+};
+
+type LoaderData = {
+  property: {
+    id: string;
+    address: string;
+    tenantLeases: TenantLease[];
+    invitations: Invitation[];
+    repairs: RepairRequest[];
+  };
+};
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -21,7 +76,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           status: "ACTIVE"
         },
         include: {
-          tenant: true
+          tenant: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            }
+          }
         }
       },
       invitations: {
@@ -36,7 +97,11 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
           }
         },
         include: {
-          initiator: true
+          initiator: {
+            select: {
+              name: true
+            }
+          }
         }
       }
     }
@@ -46,38 +111,53 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw new Response("Property not found", { status: 404 });
   }
 
-  return json({ property });
+  // Convert dates to strings
+  const formattedProperty = {
+    ...property,
+    invitations: property.invitations.map((invitation: DatabaseInvitation) => ({
+      ...invitation,
+      expiresAt: invitation.expiresAt.toISOString(),
+      startDate: invitation.startDate.toISOString(),
+      endDate: invitation.endDate.toISOString(),
+    }))
+  };
+
+  return json<LoaderData>({ property: formattedProperty });
 }
 
 export default function PropertyDetails(): ReactNode {
   const { property } = useLoaderData<typeof loader>();
+  const { toasts, addToast, removeToast } = useToast();
+  const [invitationToCancel, setInvitationToCancel] = useState<string | null>(null);
+
+  const handleCancelInvitation = async (invitationId: string) => {
+    try {
+      const response = await fetch(`/api/invitations/${invitationId}/cancel`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) throw new Error('Failed to cancel invitation');
+      
+      addToast("Invitation cancelled successfully", "success");
+      window.location.reload();
+    } catch (error) {
+      console.error('Cancel invitation error:', error);
+      addToast("Failed to cancel invitation", "error");
+    }
+  };
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link to=".." prefetch="intent">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          </Link>
-          <div>
-            <h2 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-              {property.address}
-            </h2>
-            <p className="mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-              Property Details
-            </p>
-          </div>
-        </div>
-        <Link to="invite" prefetch="intent">
-          <Button>
-            <Plus className="h-5 w-5 mr-2" />
-            Invite Tenant
-          </Button>
-        </Link>
-      </div>
+      <PageHeader
+        title={property.address}
+        subtitle="Property Details"
+        backTo=".."
+        action={{
+          label: "Invite Tenant",
+          icon: <Plus className="h-5 w-5" />,
+          href: "invite"
+        }}
+      />
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -100,163 +180,146 @@ export default function PropertyDetails(): ReactNode {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Current Tenants */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-              Current Tenants
-            </h3>
-            <Users className="h-5 w-5" style={{ color: 'var(--color-text-secondary)' }} />
-          </div>
-          
-          {property.tenantLeases.length === 0 ? (
-            <div
-              className="p-6 rounded-[var(--card-radius)] transition-all duration-200 backdrop-blur-[var(--backdrop-blur)] text-center"
-              style={{
-                backgroundColor: 'var(--card-bg)',
-                border: '1px solid var(--card-border)',
-                boxShadow: 'var(--shadow-md)',
-                color: 'var(--color-text-secondary)'
-              }}
-            >
-              No active tenants
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {property.tenantLeases.map((lease) => (
-                <div
-                  key={lease.id}
-                  className="p-4 rounded-[var(--card-radius)] transition-all duration-200 backdrop-blur-[var(--backdrop-blur)]"
-                  style={{
-                    backgroundColor: 'var(--card-bg)',
-                    border: '1px solid var(--card-border)',
-                    boxShadow: 'var(--shadow-md)'
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                        {lease.tenant.name}
-                      </p>
-                      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                        {lease.tenant.email}
-                      </p>
-                    </div>
-                    <Button variant="ghost" size="sm">
-                      View Details
-                    </Button>
+        <Card
+          accent="purple"
+          header={{
+            title: "Current Tenants",
+            icon: <Users className="h-5 w-5" />,
+            iconBackground: true
+          }}
+        >
+          <DataList<TenantLease>
+            items={property.tenantLeases}
+            emptyState={{
+              icon: Users,
+              title: "No active tenants",
+              description: "Invite tenants to start managing your property",
+              action: {
+                label: "Invite Tenant",
+                icon: <Plus className="h-5 w-5" />,
+                href: "invite"
+              }
+            }}
+            renderItem={(lease) => (
+              <Card variant="interactive">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                      {lease.tenant.name}
+                    </p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                      {lease.tenant.email}
+                    </p>
                   </div>
+                  <LinkButton
+                    to={`/dashboard/tenants/${lease.tenant.id}`}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    View Details
+                  </LinkButton>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </Card>
+            )}
+          />
+        </Card>
 
         {/* Open Repairs */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-              Open Repairs
-            </h3>
-            <Wrench className="h-5 w-5" style={{ color: 'var(--color-text-secondary)' }} />
-          </div>
-          
-          {property.repairs.length === 0 ? (
-            <div
-              className="p-6 rounded-[var(--card-radius)] transition-all duration-200 backdrop-blur-[var(--backdrop-blur)] text-center"
-              style={{
-                backgroundColor: 'var(--card-bg)',
-                border: '1px solid var(--card-border)',
-                boxShadow: 'var(--shadow-md)',
-                color: 'var(--color-text-secondary)'
-              }}
-            >
-              No open repairs
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {property.repairs.map((repair) => (
-                <div
-                  key={repair.id}
-                  className="p-4 rounded-[var(--card-radius)] transition-all duration-200 backdrop-blur-[var(--backdrop-blur)]"
-                  style={{
-                    backgroundColor: 'var(--card-bg)',
-                    border: '1px solid var(--card-border)',
-                    boxShadow: 'var(--shadow-md)'
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                        Requested by {repair.initiator.name}
-                      </p>
-                      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                        Status: {repair.status}
-                      </p>
+        <Card
+          accent="purple"
+          header={{
+            title: "Open Repairs",
+            icon: <Wrench className="h-5 w-5" />,
+            iconBackground: true
+          }}
+        >
+          <DataList<RepairRequest>
+            items={property.repairs}
+            emptyState={{
+              icon: Wrench,
+              title: "No open repairs",
+              description: "All repair requests have been resolved"
+            }}
+            renderItem={(repair) => (
+              <Card variant="interactive">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                      Requested by {repair.initiator.name}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <RepairStatus status={repair.status} />
                     </div>
-                    <Link to={`/dashboard/repairs/${repair.id}`} prefetch="intent">
-                      <Button variant="ghost" size="sm">
-                        View Details
-                      </Button>
-                    </Link>
                   </div>
+                  <LinkButton
+                    to={`/dashboard/repairs/${repair.id}`}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    View Details
+                  </LinkButton>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </Card>
+            )}
+          />
+        </Card>
 
         {/* Pending Invitations */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-              Pending Invitations
-            </h3>
-            <Mail className="h-5 w-5" style={{ color: 'var(--color-text-secondary)' }} />
-          </div>
-          
-          {property.invitations.length === 0 ? (
-            <div
-              className="p-6 rounded-[var(--card-radius)] transition-all duration-200 backdrop-blur-[var(--backdrop-blur)] text-center"
-              style={{
-                backgroundColor: 'var(--card-bg)',
-                border: '1px solid var(--card-border)',
-                boxShadow: 'var(--shadow-md)',
-                color: 'var(--color-text-secondary)'
-              }}
-            >
-              No pending invitations
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {property.invitations.map((invitation) => (
-                <div
-                  key={invitation.id}
-                  className="p-4 rounded-[var(--card-radius)] transition-all duration-200 backdrop-blur-[var(--backdrop-blur)]"
-                  style={{
-                    backgroundColor: 'var(--card-bg)',
-                    border: '1px solid var(--card-border)',
-                    boxShadow: 'var(--shadow-md)'
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                        {invitation.email}
-                      </p>
-                      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                        Expires {new Date(invitation.expiresAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Button variant="ghost" size="sm">
-                      Cancel
-                    </Button>
+        <Card
+          accent="purple"
+          header={{
+            title: "Pending Invitations",
+            icon: <Mail className="h-5 w-5" />,
+            iconBackground: true
+          }}
+        >
+          <DataList<Invitation>
+            items={property.invitations}
+            emptyState={{
+              icon: Mail,
+              title: "No pending invitations",
+              description: "All invitations have been accepted or expired"
+            }}
+            renderItem={(invitation) => (
+              <Card variant="interactive">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                      {invitation.email}
+                    </p>
+                    <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                      Expires {new Date(invitation.expiresAt).toLocaleDateString()}
+                    </p>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setInvitationToCancel(invitation.id)}
+                  >
+                    Cancel
+                  </Button>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </Card>
+            )}
+          />
+        </Card>
       </div>
+
+      {/* Cancel Invitation Modal */}
+      {invitationToCancel && (
+        <ConfirmModal
+          isOpen={true}
+          onClose={() => setInvitationToCancel(null)}
+          title="Cancel Invitation"
+          message="Are you sure you want to cancel this invitation? This action cannot be undone."
+          confirmLabel="Cancel Invitation"
+          cancelLabel="Keep Invitation"
+          onConfirm={() => handleCancelInvitation(invitationToCancel)}
+          isDestructive
+        />
+      )}
+
+      <ToastManager toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }

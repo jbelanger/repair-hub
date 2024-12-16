@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "~/context/ThemeContext";
 
@@ -27,53 +28,77 @@ interface SidebarProps {
   };
 }
 
+interface NavigationItem {
+  name: string;
+  to: string;
+  icon: LucideIcon;
+  current: boolean;
+  count?: number;
+}
+
 export function Sidebar({ user, counts }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { theme, setTheme } = useTheme();
 
-  const navigation = [
+  // Base navigation items for all users
+  const baseNavigation: NavigationItem[] = [
     {
       name: "Dashboard",
-      to: "/dashboard",
+      to: ".",
       icon: LayoutDashboard,
       current: location.pathname === "/dashboard",
     },
-    ...(user.role === "LANDLORD"
-      ? [
-          {
-            name: "Properties",
-            to: "/dashboard/properties",
-            icon: Building2,
-            count: counts.properties,
-            current: location.pathname.startsWith("/dashboard/properties"),
-          },
-        ]
-      : []),
-    {
-      name: "Repairs",
-      to: "/dashboard/repairs",
-      icon: Wrench,
-      count: counts.repairs,
-      current: location.pathname.startsWith("/dashboard/repairs"),
-    },
-    ...(user.role === "LANDLORD"
-      ? [
-          {
-            name: "Tenants",
-            to: "/dashboard/tenants",
-            icon: Users,
-            count: counts.tenants,
-            current: location.pathname === "/dashboard/tenants",
-          },
-        ]
-      : []),
     {
       name: "Settings",
-      to: "/dashboard/profile",
+      to: "profile",
       icon: Settings,
       current: location.pathname === "/dashboard/profile",
     },
+  ];
+
+  // Role-specific navigation items
+  const roleNavigation: Record<string, NavigationItem[]> = {
+    LANDLORD: [
+      {
+        name: "Properties",
+        to: "properties",
+        icon: Building2,
+        count: counts.properties,
+        current: location.pathname.startsWith("/dashboard/properties"),
+      },
+      {
+        name: "Repair Requests",
+        to: "repair-requests",
+        icon: Wrench,
+        count: counts.repairs,
+        current: location.pathname.startsWith("/dashboard/repair-requests"),
+      },
+      {
+        name: "Tenants",
+        to: "tenants",
+        icon: Users,
+        count: counts.tenants,
+        current: location.pathname === "/dashboard/tenants",
+      },
+    ],
+    TENANT: [
+      {
+        name: "Repair Requests",
+        to: "repair-requests",
+        icon: Wrench,
+        count: counts.repairs,
+        current: location.pathname.startsWith("/dashboard/repair-requests"),
+      },
+    ],
+    ADMIN: [] // Admin-specific navigation items can be added here
+  };
+
+  // Combine base navigation with role-specific items
+  const navigation = [
+    ...baseNavigation.slice(0, 1), // Dashboard first
+    ...(roleNavigation[user.role] || []),
+    ...baseNavigation.slice(1) // Settings last
   ];
 
   return (

@@ -2,11 +2,21 @@ import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from
 import { Form, useActionData, useLoaderData } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
-import { Button } from "~/components/ui/Button";
-import { ArrowLeft } from "lucide-react";
+import { Mail, Calendar } from "lucide-react";
 import { Input } from "~/components/ui/Input";
+import { Card } from "~/components/ui/Card";
+import { PageHeader } from "~/components/ui/PageHeader";
+import { FormField, FormSection, FormActions, FormError, FormGrid } from "~/components/ui/Form";
+import { useToast, ToastManager } from "~/components/ui/Toast";
+import { NoAccess } from "~/components/ui/EmptyState";
 import { addDays } from "date-fns";
-import { Link } from "@remix-run/react";
+
+type LoaderData = {
+  property: {
+    id: string;
+    address: string;
+  };
+};
 
 type ActionData = {
   success?: boolean;
@@ -25,6 +35,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     where: {
       id: params.id,
       landlordId: user.id // Ensure the property belongs to this landlord
+    },
+    select: {
+      id: true,
+      address: true,
     }
   });
 
@@ -32,7 +46,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     throw new Response("Property not found", { status: 404 });
   }
 
-  return json({ property });
+  return json<LoaderData>({ property });
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
@@ -88,7 +102,11 @@ export async function action({ request, params }: ActionFunctionArgs) {
       }
     });
 
-    return redirect(`/app/dashboard/properties/${property.id}`);
+    return redirect(`/dashboard/properties/${property.id}`, {
+      headers: {
+        "X-Toast": "Invitation sent successfully"
+      }
+    });
   } catch (error) {
     console.error("Create invitation error:", error);
     return json<ActionData>(
@@ -101,111 +119,76 @@ export async function action({ request, params }: ActionFunctionArgs) {
 export default function InviteTenant() {
   const { property } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
+  const { toasts, addToast, removeToast } = useToast();
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-8">
-        <Link to={`/app/dashboard/properties/${property.id}`}>
-          <Button variant="ghost" size="icon">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </Link>
-        <div>
-          <h2 className="text-2xl font-bold text-white">
-            Invite Tenant
-          </h2>
-          <p className="mt-1 text-white/70">
-            {property.address}
-          </p>
-        </div>
-      </div>
+    <div className="p-6">
+      <PageHeader
+        title="Invite Tenant"
+        subtitle={property.address}
+        backTo={`/dashboard/properties/${property.id}`}
+      />
 
       <div className="max-w-2xl">
-        <Form method="post" className="space-y-6">
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="email" className="block text-sm font-medium text-white/70">
-                Tenant Email
-              </label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="tenant@example.com"
-                aria-describedby="email-error"
-              />
-              {actionData?.fieldErrors?.email && (
-                <p className="text-sm text-red-500" id="email-error">
-                  {actionData.fieldErrors.email}
-                </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label htmlFor="startDate" className="block text-sm font-medium text-white/70">
-                  Lease Start Date
-                </label>
-                <Input
-                  id="startDate"
-                  name="startDate"
-                  type="date"
-                  aria-describedby="startDate-error"
-                />
-                {actionData?.fieldErrors?.startDate && (
-                  <p className="text-sm text-red-500" id="startDate-error">
-                    {actionData.fieldErrors.startDate}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label htmlFor="endDate" className="block text-sm font-medium text-white/70">
-                  Lease End Date
-                </label>
-                <Input
-                  id="endDate"
-                  name="endDate"
-                  type="date"
-                  aria-describedby="endDate-error"
-                />
-                {actionData?.fieldErrors?.endDate && (
-                  <p className="text-sm text-red-500" id="endDate-error">
-                    {actionData.fieldErrors.endDate}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {actionData?.error && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-4 text-red-200">
-              {actionData.error}
-            </div>
-          )}
-
-          <div className="flex gap-4 pt-4">
-            <Link to={`/dashboard/properties/${property.id}`} className="flex-1">
-              <Button
-                type="button"
-                variant="secondary"
-                size="lg"
-                className="w-full"
+        <Card
+          accent="purple"
+          header={{
+            title: "Tenant Invitation",
+            subtitle: "Send an invitation to a new tenant",
+            icon: <Mail className="h-5 w-5" />,
+            iconBackground: true
+          }}
+        >
+          <Form method="post">
+            <FormSection>
+              <FormField
+                label="Tenant Email"
+                error={actionData?.fieldErrors?.email}
               >
-                Cancel
-              </Button>
-            </Link>
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="flex-1"
-            >
-              Send Invitation
-            </Button>
-          </div>
-        </Form>
+                <Input
+                  name="email"
+                  type="email"
+                  placeholder="tenant@example.com"
+                  leftIcon={<Mail className="h-5 w-5" />}
+                />
+              </FormField>
+
+              <FormGrid>
+                <FormField
+                  label="Lease Start Date"
+                  error={actionData?.fieldErrors?.startDate}
+                >
+                  <Input
+                    name="startDate"
+                    type="date"
+                    leftIcon={<Calendar className="h-5 w-5" />}
+                  />
+                </FormField>
+
+                <FormField
+                  label="Lease End Date"
+                  error={actionData?.fieldErrors?.endDate}
+                >
+                  <Input
+                    name="endDate"
+                    type="date"
+                    leftIcon={<Calendar className="h-5 w-5" />}
+                  />
+                </FormField>
+              </FormGrid>
+            </FormSection>
+
+            <FormError error={actionData?.error} />
+
+            <FormActions
+              cancelHref={`/dashboard/properties/${property.id}`}
+              submitLabel="Send Invitation"
+            />
+          </Form>
+        </Card>
       </div>
+
+      <ToastManager toasts={toasts} removeToast={removeToast} />
     </div>
   );
 }
