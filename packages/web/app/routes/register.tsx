@@ -20,26 +20,47 @@ type ActionData = {
   };
 };
 
+type LoaderData = {
+  address: string;
+  plans: Awaited<ReturnType<typeof db.plan.findMany>>;
+  existingUser: Awaited<ReturnType<typeof db.user.findUnique>>;
+  error?: string;
+};
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
-  const address = url.searchParams.get("address")?.toLowerCase();
-  const plan = url.searchParams.get("plan");
+  const address = url.searchParams.get("address");
 
   if (!address) {
     return redirect("/");
   }
 
-  // Check if user already exists
-  const existingUser = await db.user.findUnique({
-    where: { address }
-  });
+  try {
+    // Check if user already exists
+    const existingUser = await db.user.findUnique({
+      where: { address: address.toLowerCase() }
+    });
 
-  // Get available plans
-  const plans = await db.plan.findMany({
-    orderBy: { price: 'asc' }
-  });
+    // Get available plans
+    const plans = await db.plan.findMany({
+      orderBy: { price: 'asc' }
+    });
 
-  return json({ address, plans, existingUser });
+    return json<LoaderData>({ 
+      address, 
+      plans, 
+      existingUser 
+    });
+  } catch (error) {
+    console.error("Database error:", error);
+    // Return empty plans array if database is not accessible
+    return json<LoaderData>({ 
+      address, 
+      plans: [], 
+      existingUser: null,
+      error: "Failed to load user data"
+    });
+  }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -50,6 +71,13 @@ export async function action({ request }: ActionFunctionArgs) {
   const role = formData.get("role") as string;
   const address = formData.get("address") as string;
   const plan = formData.get("plan") as string;
+
+  if (!address) {
+    return json<ActionData>(
+      { error: "Wallet address is required" },
+      { status: 400 }
+    );
+  }
 
   const fieldErrors: ActionData["fieldErrors"] = {};
   if (!name) fieldErrors.name = "Name is required";
@@ -62,6 +90,18 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   try {
+    // Check if user already exists
+    const existingUser = await db.user.findUnique({
+      where: { address: address.toLowerCase() }
+    });
+
+    if (existingUser) {
+      return json<ActionData>(
+        { error: "An account with this wallet already exists" },
+        { status: 400 }
+      );
+    }
+
     // Create user
     const user = await db.user.create({
       data: {
@@ -86,20 +126,40 @@ export async function action({ request }: ActionFunctionArgs) {
       });
     }
 
-    return createUserSession(user.id, "/");
+    return createUserSession(user.id, "/dashboard");
   } catch (error) {
     console.error("Registration error:", error);
     return json<ActionData>(
-      { success: false, error: "Failed to create account" },
+      { success: false, error: "Failed to create account. Please try again." },
       { status: 500 }
     );
   }
 }
 
 export default function Register() {
-  const { address, plans, existingUser } = useLoaderData<typeof loader>();
+  const { address, plans, existingUser, error } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const selectedPlan = searchParams.get("plan");
+
+  if (error) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4 text-red-500">
+            Error Loading Data
+          </h2>
+          <p className="mb-6" style={{ color: 'var(--color-text-secondary)' }}>
+            {error}
+          </p>
+          <Link to="/">
+            <Button variant="primary" size="lg">
+              Return Home
+            </Button>
+          </Link>
+        </Card>
+      </div>
+    );
+  }
 
   if (existingUser) {
     return (
@@ -132,8 +192,8 @@ export default function Register() {
       <Form method="post" className="space-y-8">
         <input type="hidden" name="address" value={address} />
 
-        {/* Role Selection */}
-        <div className="space-y-4">
+{/* Role Selection */}
+<div className="space-y-4">
           <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
             Select your role
           </h3>

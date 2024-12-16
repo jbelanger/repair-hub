@@ -1,9 +1,12 @@
 import { Link, useNavigate } from "@remix-run/react";
 import { Button } from "~/components/ui/Button";
-import { Building2, CheckCircle2, Shield, Wrench } from "lucide-react";
+import { Building2, CheckCircle2, Shield, Wrench, Loader2 } from "lucide-react";
 import { useAccount } from 'wagmi';
 import { ConnectWallet } from "~/components/ConnectWallet";
+import { WalletWrapper } from "~/components/WalletWrapper";
+import { Card, CardContent, CardHeader, CardFooter } from "~/components/ui/Card";
 import '@rainbow-me/rainbowkit/styles.css';
+import { useEffect, useState } from "react";
 
 const features = [
   {
@@ -63,34 +66,95 @@ const plans = [
 export default function Index() {
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
+  const [isRegistered, setIsRegistered] = useState<boolean | null>(null);
+  const [isChecking, setIsChecking] = useState(false);
+
+  // Check if user is registered when connected
+  useEffect(() => {
+    async function checkUser() {
+      if (!isConnected || !address) {
+        setIsRegistered(null);
+        return;
+      }
+
+      setIsChecking(true);
+      try {
+        const response = await fetch('/api/auth/check-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address })
+        });
+
+        if (response.ok) {
+          const { exists } = await response.json();
+          setIsRegistered(exists);
+        }
+      } catch (error) {
+        console.error('Error checking user:', error);
+      } finally {
+        setIsChecking(false);
+      }
+    }
+
+    checkUser();
+  }, [isConnected, address]);
+
+  // Render appropriate action button based on user state
+  const renderActionButton = () => {
+    if (!isConnected) {
+      return (
+        <>
+          <p className="text-lg text-white/90">
+            Connect your wallet to get started with secure property management
+          </p>
+          <WalletWrapper>
+            <ConnectWallet variant="primary" size="lg" />
+          </WalletWrapper>
+        </>
+      );
+    }
+
+    if (isChecking) {
+      return (
+        <div className="h-12 flex items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+        </div>
+      );
+    }
+
+    if (isRegistered) {
+      return (
+        <>
+          <p className="text-lg text-white/90">
+            Welcome back! Access your dashboard to manage your properties.
+          </p>
+          <Button 
+            size="lg"
+            onClick={() => navigate('/dashboard')}
+          >
+            Go to Dashboard
+          </Button>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <p className="text-lg text-white/90">
+          Complete your registration to start managing properties.
+        </p>
+        <Button 
+          size="lg"
+          onClick={() => navigate(`/register?address=${address}`)}
+        >
+          Complete Registration
+        </Button>
+      </>
+    );
+  };
 
   return (
     <div className="relative isolate">
-      {/* Header login buttons */}
-      <div className="fixed top-8 right-8 z-50 flex items-center gap-6">
-        {isConnected ? (
-          <>
-            <button
-              onClick={() => {
-                // Let ConnectWallet handle the redirect to dashboard
-                const connectButton = document.querySelector('[aria-label="Connect Wallet"]');
-                if (connectButton instanceof HTMLElement) {
-                  connectButton.click();
-                }
-              }}
-              className="text-sm font-medium text-white/70 hover:text-white transition-colors"
-            >
-              Login
-            </button>
-            <Button onClick={() => navigate(`/register?address=${address}`)}>
-              Sign Up
-            </Button>
-          </>
-        ) : (
-          <ConnectWallet variant="link" />
-        )}
-      </div>
-
       {/* Hero section */}
       <div className="relative pt-14">
         <div className="py-24 sm:py-32">
@@ -105,22 +169,8 @@ export default function Index() {
               <p className="mt-6 text-lg leading-8 text-white/70">
                 Streamline your property management with smart contracts. Connect landlords and tenants with transparent, secure, and efficient solutions.
               </p>
-              <div className="mt-10 flex items-center justify-center gap-x-6">
-                <Button 
-                  size="lg" 
-                  onClick={() => {
-                    if (isConnected) {
-                      navigate(`/register?address=${address}`);
-                    } else {
-                      const connectButton = document.querySelector('[aria-label="Connect Wallet"]');
-                      if (connectButton instanceof HTMLElement) {
-                        connectButton.click();
-                      }
-                    }
-                  }}
-                >
-                  Sign Up
-                </Button>
+              <div className="mt-10 flex flex-col items-center gap-6 min-h-[120px]">
+                {renderActionButton()}
                 <Link to="/about" className="text-sm font-medium text-white/70 hover:text-white transition-colors">
                   Learn more <span aria-hidden="true">→</span>
                 </Link>
@@ -145,19 +195,21 @@ export default function Index() {
             </p>
           </div>
           <div className="mx-auto mt-16 max-w-2xl sm:mt-20 lg:mt-24 lg:max-w-none">
-            <dl className="grid max-w-xl grid-cols-1 gap-x-8 gap-y-16 lg:max-w-none lg:grid-cols-3">
+            <div className="grid max-w-xl grid-cols-1 gap-8 lg:max-w-none lg:grid-cols-3">
               {features.map((feature) => (
-                <div key={feature.name} className="flex flex-col">
-                  <dt className="flex items-center gap-x-3 text-base font-semibold leading-7 text-white">
-                    <feature.icon className="h-5 w-5 flex-none text-purple-500" aria-hidden="true" />
-                    {feature.name}
-                  </dt>
-                  <dd className="mt-4 flex flex-auto flex-col text-base leading-7 text-white/70">
-                    <p className="flex-auto">{feature.description}</p>
-                  </dd>
-                </div>
+                <Card
+                  key={feature.name}
+                  variant="interactive"
+                  header={{
+                    title: feature.name,
+                    icon: <feature.icon className="h-5 w-5" />,
+                    iconBackground: true
+                  }}
+                >
+                  <p className="text-white/70">{feature.description}</p>
+                </Card>
               ))}
-            </dl>
+            </div>
           </div>
         </div>
       </div>
@@ -172,56 +224,63 @@ export default function Index() {
             <p className="mt-6 text-lg leading-8 text-white/70">
               Choose the plan that best fits your needs. All plans include our core features.
             </p>
+            {!isConnected && (
+              <div className="mt-8 flex flex-col items-center gap-4">
+                <p className="text-lg text-white/90">Ready to get started?</p>
+                <WalletWrapper>
+                  <ConnectWallet variant="primary" size="lg" />
+                </WalletWrapper>
+              </div>
+            )}
           </div>
           <div className="mx-auto mt-16 grid max-w-lg gap-8 lg:max-w-4xl lg:grid-cols-2">
             {plans.map((plan, planIdx) => (
-              <div
+              <Card
                 key={plan.name}
-                className="rounded-[32px] bg-[#0F0F0F] p-8 ring-1 ring-white/10"
+                variant="interactive"
+                accent={planIdx === 1 ? "purple" : "none"}
               >
-                <h3 className="text-xl font-semibold leading-8 text-white">
-                  {plan.name}
-                </h3>
-                <p className="mt-4 text-sm leading-6 text-white/70">{plan.description}</p>
-                <div className="mt-8 flex items-baseline">
-                  <span className="text-4xl font-bold text-white">${plan.price}</span>
-                  <span className="text-sm font-semibold leading-6 text-white/70">
-                    /{plan.interval}
-                  </span>
-                </div>
-                {plan.yearlyPrice && (
-                  <p className="mt-2 text-sm text-white/70">
-                    or ${plan.yearlyPrice}/{plan.yearlyInterval} (save 17%)
-                  </p>
-                )}
-                <ul className="mt-10 space-y-4">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-4">
-                      <CheckCircle2 className="h-5 w-5 flex-none text-purple-500" aria-hidden="true" />
-                      <span className="text-sm text-white/70">{feature}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  onClick={() => {
-                    if (isConnected) {
-                      navigate(`${plan.href}&address=${address}`);
-                    } else {
-                      const connectButton = document.querySelector('[aria-label="Connect Wallet"]');
-                      if (connectButton instanceof HTMLElement) {
-                        connectButton.click();
-                      }
-                    }
-                  }}
-                  className={`mt-10 block w-full rounded-full py-3 text-center text-sm font-semibold leading-6 ${
-                    planIdx === 1
-                      ? 'bg-purple-500 text-white hover:bg-purple-400'
-                      : 'bg-[#1A1A1A] text-white hover:bg-[#242424]'
-                  }`}
-                >
-                  {plan.cta}
-                </button>
-              </div>
+                <CardHeader>
+                  <div>
+                    <h3 className="text-xl font-semibold text-white">{plan.name}</h3>
+                    <p className="mt-2 text-sm text-white/70">{plan.description}</p>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-baseline">
+                    <span className="text-4xl font-bold text-white">${plan.price}</span>
+                    <span className="text-sm font-semibold text-white/70">
+                      /{plan.interval}
+                    </span>
+                  </div>
+                  {plan.yearlyPrice && (
+                    <p className="mt-2 text-sm text-white/70">
+                      or ${plan.yearlyPrice}/{plan.yearlyInterval} (save 17%)
+                    </p>
+                  )}
+                  <ul className="mt-8 space-y-4">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="flex items-center gap-4">
+                        <CheckCircle2 className="h-5 w-5 flex-none text-purple-500" />
+                        <span className="text-sm text-white/70">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+                <CardFooter>
+                  {isConnected && !isRegistered && !isChecking ? (
+                    <Button
+                      onClick={() => navigate(`${plan.href}&address=${address}`)}
+                      className="w-full rounded-full py-3"
+                      variant={planIdx === 1 ? "primary" : "secondary"}
+                    >
+                      {plan.cta}
+                    </Button>
+                  ) : (
+                    <div className="h-12 w-full" /> // Placeholder to maintain card height
+                  )}
+                </CardFooter>
+              </Card>
             ))}
           </div>
         </div>
