@@ -13,12 +13,14 @@
     "@nomicfoundation/hardhat-ignition": "^0.15.7",
     "@nomicfoundation/hardhat-network-helpers": "^1.0.12",
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@openzeppelin/hardhat-upgrades": "^3.7.0",
     "chai": "4",
     "ethers": "^6.13.4",
     "hardhat": "^2.22.16"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.1.0",
+    "@openzeppelin/contracts-upgradeable": "^5.1.0",
     "pnpm": "^9.15.0"
   }
 }

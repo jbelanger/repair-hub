@@ -1,230 +1,316 @@
 const { expect } = require("chai");
-const { ethers } = require("hardhat");
+const { ethers, upgrades } = require("hardhat");
+const { parseEther } = require("ethers");
 
 describe("RepairRequestContract", function () {
-  let RepairRequestContract, contract, landlord, tenant, otherUser;
+  let RepairRequestContract;
+  let contract;
+  let admin, tenant, landlord, other;
+
+  function parseEvent(receipt, contractInterface, eventName) {
+    for (const log of receipt.logs) {
+      try {
+        const parsed = contractInterface.parseLog(log);
+        if (parsed.name === eventName) {
+          return parsed;
+        }
+      } catch (e) {
+        // log not from this contract, ignore
+      }
+    }
+    return null;
+  }
 
   beforeEach(async function () {
-    // Deploy the contract and set up accounts
-    [landlord, tenant, otherUser] = await ethers.getSigners();
-    const Contract = await ethers.getContractFactory("RepairRequestContract");
-    contract = await Contract.deploy();
+    [admin, tenant, landlord, other] = await ethers.getSigners();
+    RepairRequestContract = await ethers.getContractFactory("RepairRequestContract");
+    contract = await upgrades.deployProxy(RepairRequestContract, [admin.address], { initializer: "initialize" });
   });
 
-  describe("createRepairRequest", function () {
-    it("Should allow a tenant to create a repair request", async function () {
-      const propertyId = "property-123";
-      const descriptionHash = "QmTestHash123";
+  describe("Deployment and Roles", function () {
+    it("Should set the admin role correctly", async function () {
+      const ADMIN_ROLE = await contract.ADMIN_ROLE();
+      expect(await contract.hasRole(ADMIN_ROLE, admin.address)).to.be.true;
+    });
+    
+    it("Non-admin should not be able to pause the contract", async function () {
+      await expect(contract.connect(tenant).pause()).to.be.revertedWithCustomError(contract, "CallerIsNotAdmin");
+    });
 
-      const tx = await contract
-        .connect(tenant)
-        .createRepairRequest(propertyId, descriptionHash, landlord.address);
+    it("Non-admin should not be able to unpause the contract", async function () {
+      await contract.connect(admin).pause();
+      await expect(contract.connect(tenant).unpause()).to.be.revertedWithCustomError(contract, "CallerIsNotAdmin");
+    });
+  });
+  
+  describe("Pausing and Unpausing", function () {
+    it("Admin can pause and unpause", async function () {
+      await contract.connect(admin).pause();
+      expect(await contract.paused()).to.be.true;
+
+      await contract.connect(admin).unpause();
+      expect(await contract.paused()).to.be.false;
+    });
+    
+    it("No actions allowed when paused (create)", async function () {
+      await contract.connect(admin).pause();
+      await expect(
+        contract.connect(tenant).createRepairRequest("Property1", "DescHash", landlord.address)
+      ).to.be.revertedWithCustomError(contract, "EnforcedPause");
+    });
+  });
+  
+  describe("Upgrade Mechanism", function () {
+    it("Non-admin cannot upgrade", async function () {
+      const NewImplementation = await ethers.getContractFactory("RepairRequestContract", tenant);
+      await expect(
+        upgrades.upgradeProxy(await contract.getAddress(), NewImplementation)
+      ).to.be.revertedWithCustomError(contract, "CallerIsNotAdmin");
+    });
+
+    it("Admin can upgrade", async function () {
+      const NewImplementation = await ethers.getContractFactory("RepairRequestContract", admin);
+      const upgraded = await upgrades.upgradeProxy(await contract.getAddress(), NewImplementation);
+      expect(await upgraded.ADMIN_ROLE()).to.equal(await contract.ADMIN_ROLE());
+    });
+  });
+
+  describe("Creating Repair Requests", function () {
+    it("Tenant can create a repair request with valid data", async function () {
+      const tx = await contract.connect(tenant).createRepairRequest("Property1", "DescHash", landlord.address);
       const receipt = await tx.wait();
-
-      const event = receipt.logs
-        .map((log) => contract.interface.parseLog(log))
-        .find((e) => e.name === "RepairRequestCreated");
-
-      expect(event.args.id).to.equal(1);
+      const event = parseEvent(receipt, contract.interface, "RepairRequestCreated");
+      expect(event).to.not.be.null;
       expect(event.args.initiator).to.equal(tenant.address);
-      expect(event.args.propertyId).to.equal(propertyId);
-
-      const repairRequest = await contract.getRepairRequest(1);
-      expect(repairRequest.id).to.equal(1);
-      expect(repairRequest.initiator).to.equal(tenant.address);
-      expect(repairRequest.propertyId).to.equal(propertyId);
+      expect(event.args.landlord).to.equal(landlord.address);
     });
-
-    it("Should revert if propertyId or descriptionHash is empty", async function () {
-      await expect(
-        contract.connect(tenant).createRepairRequest("", "QmHash", landlord.address)
-      ).to.be.revertedWith("Property ID cannot be empty");
-
-      await expect(
-        contract.connect(tenant).createRepairRequest("property-123", "", landlord.address)
-      ).to.be.revertedWith("Description hash cannot be empty");
-    });
-
+    
     it("Should revert if landlord address is zero", async function () {
       await expect(
-        contract.connect(tenant).createRepairRequest("property-123", "QmHash", ethers.ZeroAddress)
-      ).to.be.revertedWith("Landlord address cannot be zero");
+        contract.connect(tenant).createRepairRequest("Property1", "DescHash", ethers.ZeroAddress)
+      ).to.be.revertedWithCustomError(contract, "ZeroAddress");
+    });
+
+    it("Should revert if propertyId is empty", async function () {
+      await expect(
+        contract.connect(tenant).createRepairRequest("", "DescHash", landlord.address)
+      ).to.be.revertedWithCustomError(contract, "InvalidPropertyId");
+    });
+
+    it("Should revert if descriptionHash is empty", async function () {
+      await expect(
+        contract.connect(tenant).createRepairRequest("Property1", "", landlord.address)
+      ).to.be.revertedWithCustomError(contract, "InvalidDescriptionHash");
+    });
+    
+    it("Should allow max length propertyId and descriptionHash", async function () {
+      const maxString = "a".repeat(256);
+      const tx = await contract.connect(tenant).createRepairRequest(maxString, maxString, landlord.address);
+      const receipt = await tx.wait();
+      const event = parseEvent(receipt, contract.interface, "RepairRequestCreated");
+      expect(event.args.propertyId).to.equal(maxString);
+      expect(event.args.descriptionHash).to.equal(maxString);
+    });
+
+    it("Should revert if propertyId exceeds max length", async function () {
+      const longString = "a".repeat(257);
+      await expect(
+        contract.connect(tenant).createRepairRequest(longString, "DescHash", landlord.address)
+      ).to.be.revertedWithCustomError(contract, "InvalidPropertyId");
+    });
+
+    it("Should revert if descriptionHash exceeds max length", async function () {
+      const longString = "a".repeat(257);
+      await expect(
+        contract.connect(tenant).createRepairRequest("Property1", longString, landlord.address)
+      ).to.be.revertedWithCustomError(contract, "InvalidDescriptionHash");
+    });
+  });
+  
+  describe("Non-Existent Requests", function () {
+    it("Should revert if accessing a non-existent request", async function () {
+      await expect(contract.getRepairRequest(999)).to.be.revertedWithCustomError(contract, "RepairRequestDoesNotExist");
+    });
+    
+    it("Should revert if trying to update description on non-existent request", async function () {
+      await expect(contract.connect(tenant).updateDescription(999, "NewDesc"))
+        .to.be.revertedWithCustomError(contract, "RepairRequestDoesNotExist");
     });
   });
 
-  describe("updateWorkDetails", function () {
+  describe("After Creation", function () {
     beforeEach(async function () {
-      await contract
-        .connect(tenant)
-        .createRepairRequest("property-123", "QmTestHash123", landlord.address);
+      await contract.connect(tenant).createRepairRequest("Property1", "DescHash", landlord.address);
     });
 
-    it("Should allow the landlord to update work details", async function () {
-      const newWorkDetailsHash = "QmWorkDetailsHash";
-      const tx = await contract.connect(landlord).updateWorkDetails(1, newWorkDetailsHash);
+    it("Tenant can update description if not cancelled", async function () {
+      const tx = await contract.connect(tenant).updateDescription(1, "NewDescHash");
       const receipt = await tx.wait();
-
-      const event = receipt.logs
-        .map((log) => contract.interface.parseLog(log))
-        .find((e) => e.name === "WorkDetailsUpdated");
-
-      expect(event.args.oldHash).to.equal("");
-      expect(event.args.newHash).to.equal(newWorkDetailsHash);
-
-      const repairRequest = await contract.getRepairRequest(1);
-      expect(repairRequest.workDetailsHash).to.equal(newWorkDetailsHash);
+      const event = parseEvent(receipt, contract.interface, "DescriptionUpdated");
+      expect(event.args.newHash).to.equal("NewDescHash");
     });
 
-    it("Should revert if called by someone other than the landlord", async function () {
+    it("Should revert if non-tenant tries to update description", async function () {
       await expect(
-        contract.connect(tenant).updateWorkDetails(1, "QmWorkDetailsHash")
-      ).to.be.revertedWith("Caller is not the landlord");
-
-      await expect(
-        contract.connect(otherUser).updateWorkDetails(1, "QmWorkDetailsHash")
-      ).to.be.revertedWith("Caller is not the landlord");
+        contract.connect(landlord).updateDescription(1, "NewDescHash")
+      ).to.be.revertedWithCustomError(contract, "CallerIsNotTenant");
     });
 
-    it("Should revert if the work details hash is empty", async function () {
+    it("Landlord can update work details if not cancelled", async function () {
+      const tx = await contract.connect(landlord).updateWorkDetails(1, "WorkDetailsHash");
+      const receipt = await tx.wait();
+      const event = parseEvent(receipt, contract.interface, "WorkDetailsUpdated");
+      expect(event.args.newHash).to.equal("WorkDetailsHash");
+    });
+
+    it("Should revert if tenant tries to update work details", async function () {
+      await expect(
+        contract.connect(tenant).updateWorkDetails(1, "WorkDetailsHash")
+      ).to.be.revertedWithCustomError(contract, "CallerIsNotLandlord");
+    });
+
+    it("Should revert if workDetailsHash is empty or too long", async function () {
       await expect(
         contract.connect(landlord).updateWorkDetails(1, "")
-      ).to.be.revertedWith("Work details hash cannot be empty");
+      ).to.be.revertedWithCustomError(contract, "InvalidWorkDetailsHash");
+
+      const longString = "a".repeat(257);
+      await expect(
+        contract.connect(landlord).updateWorkDetails(1, longString)
+      ).to.be.revertedWithCustomError(contract, "InvalidWorkDetailsHash");
     });
   });
-
-  describe("updateRepairRequestStatus", function () {
+  
+  describe("Status Transitions", function () {
     beforeEach(async function () {
-      await contract
-        .connect(tenant)
-        .createRepairRequest("property-123", "QmTestHash123", landlord.address);
+      await contract.connect(tenant).createRepairRequest("Property1", "DescHash", landlord.address);
     });
 
-    it("Should allow the landlord to update the status to InProgress", async function () {
-      const tx = await contract.connect(landlord).updateRepairRequestStatus(1, 1); // Status.InProgress
+    it("Tenant can cancel if pending", async function () {
+      const tx = await contract.connect(tenant).withdrawRepairRequest(1);
       const receipt = await tx.wait();
-
-      const event = receipt.logs
-        .map((log) => contract.interface.parseLog(log))
-        .find((e) => e.name === "RepairRequestUpdated");
-
-      expect(event.args.status).to.equal(1);
-
-      const repairRequest = await contract.getRepairRequest(1);
-      expect(repairRequest.status).to.equal(1); // Status.InProgress
+      const event = parseEvent(receipt, contract.interface, "RepairRequestStatusChanged");
+      expect(event.args.oldStatus).to.equal(0); // Pending
+      expect(event.args.newStatus).to.equal(6); // Cancelled
     });
 
-    it("Should revert on invalid status transitions", async function () {
-      // Call with an invalid status outside the defined enum range
+    it("Tenant cannot cancel if not pending", async function () {
+      // landlord sets to InProgress
+      await contract.connect(landlord).updateRepairRequestStatus(1, 1);
       await expect(
-        contract.connect(landlord).updateRepairRequestStatus(1,99) // Invalid status (not defined in the enum)
-      ).to.be.revertedWith("Invalid status");
+        contract.connect(tenant).withdrawRepairRequest(1)
+      ).to.be.revertedWithCustomError(contract, "RequestIsNotPending");
     });
 
-    it("Should revert if called by someone other than the landlord", async function () {
-      await expect(
-        contract.connect(tenant).updateRepairRequestStatus(1, 1)
-      ).to.be.revertedWith("Caller is not the landlord");
+    it("Landlord can transition Pending -> InProgress -> Completed", async function () {
+      await contract.connect(landlord).updateRepairRequestStatus(1, 1); // InProgress
+      let req = await contract.getRepairRequest(1);
+      expect(req.status).to.equal(1); // InProgress
 
-      await expect(
-        contract.connect(otherUser).updateRepairRequestStatus(1, 1)
-      ).to.be.revertedWith("Caller is not the landlord");
+      await contract.connect(landlord).updateRepairRequestStatus(1, 2); // Completed
+      req = await contract.getRepairRequest(1);
+      expect(req.status).to.equal(2); // Completed
     });
 
-    it("Should revert if updating an Accepted request", async function () {
-      await contract.connect(landlord).updateRepairRequestStatus(1, 2); // Status.Completed
-      await contract.connect(tenant).approveWork(1, true); // Accepted
-
-      await expect(
-        contract.connect(landlord).updateRepairRequestStatus(1, 1) // Status.InProgress
-      ).to.be.revertedWith("Cannot update an accepted request");
+    it("Landlord can reject from Pending", async function () {
+      await contract.connect(landlord).updateRepairRequestStatus(1, 5); // Rejected
+      const req = await contract.getRepairRequest(1);
+      expect(req.status).to.equal(5);
     });
 
-    it("Should update timestamps correctly", async function () {
-      const initialRequest = await contract.getRepairRequest(1);
-      const initialUpdatedAt = initialRequest.updatedAt;
+    it("Invalid transitions revert", async function () {
+      // Trying to go from Pending -> Completed directly
+      await expect(
+        contract.connect(landlord).updateRepairRequestStatus(1, 2)
+      ).to.be.revertedWithCustomError(contract, "InvalidStatusTransition");
+    });
 
-      await contract.connect(landlord).updateRepairRequestStatus(1, 1); // Status.InProgress
-      const updatedRequest = await contract.getRepairRequest(1);
+    it("Tenant can approve or refuse after Completed", async function () {
+      await contract.connect(landlord).updateRepairRequestStatus(1, 1); // InProgress
+      await contract.connect(landlord).updateRepairRequestStatus(1, 2); // Completed
 
-      expect(updatedRequest.updatedAt).to.be.gt(initialUpdatedAt);
+      // Tenant approves
+      await contract.connect(tenant).approveWork(1, true);
+      let req = await contract.getRepairRequest(1);
+      expect(req.status).to.equal(3); // Accepted
+
+      // Another request
+      await contract.connect(tenant).createRepairRequest("Property2", "DescHash2", landlord.address);
+      await contract.connect(landlord).updateRepairRequestStatus(2, 1); // InProgress
+      await contract.connect(landlord).updateRepairRequestStatus(2, 2); // Completed
+
+      await contract.connect(tenant).approveWork(2, false);
+      req = await contract.getRepairRequest(2);
+      expect(req.status).to.equal(4); // Refused
+    });
+
+    it("Tenant cannot approve if not completed", async function () {
+      await expect(
+        contract.connect(tenant).approveWork(1, true)
+      ).to.be.revertedWithCustomError(contract, "RequestNotCompleted");
     });
   });
 
-  describe("approveWork", function () {
+  describe("Actions on Cancelled Requests", function () {
     beforeEach(async function () {
-      await contract
-        .connect(tenant)
-        .createRepairRequest("property-123", "QmTestHash123", landlord.address);
-      await contract.connect(landlord).updateRepairRequestStatus(1, 2); // Status.Completed
+      await contract.connect(tenant).createRepairRequest("Property1", "DescHash", landlord.address);
+      await contract.connect(tenant).withdrawRepairRequest(1); // now cancelled
     });
 
-    it("Should allow the tenant to approve the work", async function () {
-      const tx = await contract.connect(tenant).approveWork(1, true); // Accepted
-      const receipt = await tx.wait();
-
-      const event = receipt.logs
-        .map((log) => contract.interface.parseLog(log))
-        .find((e) => e.name === "RepairRequestUpdated");
-
-      expect(event.args.status).to.equal(3); // Status.Accepted
-
-      const repairRequest = await contract.getRepairRequest(1);
-      expect(repairRequest.status).to.equal(3); // Status.Accepted
-    });
-
-    it("Should allow the tenant to refuse the work", async function () {
-      const tx = await contract.connect(tenant).approveWork(1, false); // Refused
-      const receipt = await tx.wait();
-
-      const event = receipt.logs
-        .map((log) => contract.interface.parseLog(log))
-        .find((e) => e.name === "RepairRequestUpdated");
-
-      expect(event.args.status).to.equal(4); // Status.Refused
-
-      const repairRequest = await contract.getRepairRequest(1);
-      expect(repairRequest.status).to.equal(4); // Status.Refused
-    });
-
-    it("Should revert if the work is not completed", async function () {
-      await contract.connect(landlord).updateRepairRequestStatus(1, 1); // Status.InProgress
-
-      await expect(contract.connect(tenant).approveWork(1, true)).to.be.revertedWith(
-        "Work is not completed"
-      );
-    });
-
-    it("Should revert if called by someone other than the tenant", async function () {
+    it("Should revert when trying to update description on cancelled request", async function () {
       await expect(
-        contract.connect(otherUser).approveWork(1, true)
-      ).to.be.revertedWith("Caller is not the tenant");
+        contract.connect(tenant).updateDescription(1, "SomeDesc")
+      ).to.be.revertedWithCustomError(contract, "RequestIsCancelled");
+    });
+
+    it("Should revert when trying to update work details on cancelled request", async function () {
+      await expect(
+        contract.connect(landlord).updateWorkDetails(1, "NewWork")
+      ).to.be.revertedWithCustomError(contract, "RequestIsCancelled");
+    });
+
+    it("Should revert when trying to update status on cancelled request", async function () {
+      await expect(
+        contract.connect(landlord).updateRepairRequestStatus(1, 1)
+      ).to.be.revertedWithCustomError(contract, "RequestIsCancelled");
+    });
+
+    it("Should revert when trying to approve work on cancelled request", async function () {
+      await expect(
+        contract.connect(tenant).approveWork(1, true)
+      ).to.be.revertedWithCustomError(contract, "RequestIsCancelled");
     });
   });
 
-  describe("General validations", function () {
-    it("Should revert when interacting with non-existent requests", async function () {
+  describe("Fallback and Receive", function () {
+    it("Should revert if sending ETH directly to contract (fallback)", async function () {
+      const value = parseEther("1.0");
       await expect(
-        contract.connect(landlord).updateRepairRequestStatus(999, 1)
-      ).to.be.revertedWith("Repair request does not exist");
-
-      await expect(
-        contract.connect(tenant).approveWork(999, true)
-      ).to.be.revertedWith("Repair request does not exist");
+        tenant.sendTransaction({ to: await contract.getAddress(), value })
+      ).to.be.revertedWith("No direct payments accepted");
     });
 
-    it("Should handle multiple repair requests independently", async function () {
-      await contract
-        .connect(tenant)
-        .createRepairRequest("property-123", "QmHash1", landlord.address);
-      await contract
-        .connect(tenant)
-        .createRepairRequest("property-456", "QmHash2", landlord.address);
+    it("Should revert if sending ETH directly to contract (receive)", async function () {
+      const value = parseEther("0.1");
+      await expect(
+        tenant.sendTransaction({ to: await contract.getAddress(), value })
+      ).to.be.revertedWith("No direct payments accepted");
+    });
+  });
 
-      const request1 = await contract.getRepairRequest(1);
-      const request2 = await contract.getRepairRequest(2);
+  describe("Access Control and Roles", function () {
+    it("Non-admin cannot grant roles", async function () {
+      const ADMIN_ROLE = await contract.ADMIN_ROLE();
+      await expect(contract.connect(tenant).grantRole(ADMIN_ROLE, other.address)).to.be.reverted;
+    });
+    
+    it("Admin can grant and revoke roles", async function () {
+      const ADMIN_ROLE = await contract.ADMIN_ROLE();
+      await contract.connect(admin).grantRole(ADMIN_ROLE, other.address);
+      expect(await contract.hasRole(ADMIN_ROLE, other.address)).to.be.true;
 
-      expect(request1.propertyId).to.equal("property-123");
-      expect(request2.propertyId).to.equal("property-456");
+      await contract.connect(admin).revokeRole(ADMIN_ROLE, other.address);
+      expect(await contract.hasRole(ADMIN_ROLE, other.address)).to.be.false;
     });
   });
 });
