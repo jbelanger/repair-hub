@@ -1,219 +1,213 @@
-# **RepairHub Smart Contract: RepairRequestContract**
+# RepairHub Smart Contract: RepairRequestContract
 
-## **Overview**
-The **RepairRequestContract** is a Solidity smart contract designed to facilitate and manage repair requests between tenants and landlords on the blockchain. The contract ensures role-based access control, transparency, and immutability.
+## Overview
 
----
+The RepairRequestContract is a Solidity upgradeable smart contract designed to facilitate and manage repair requests between tenants and landlords on the blockchain. It leverages OpenZeppelin's upgradeable contracts, role-based access control, pausing functionality, and custom errors for gas efficiency and clearer revert reasons.
 
-## **Key Features**
-1. **Repair Request Lifecycle**:
-   - Tenants can create repair requests tied to a property.
-   - Landlords manage the requests by updating work details and statuses.
-   - Tenants approve or reject the completed work.
+## Key Features
 
-2. **Role-Based Access Control**:
-   - **Tenant**:
-     - Creates repair requests.
-     - Approves or rejects completed work.
-   - **Landlord**:
-     - Updates work details and status.
-     - Rejects invalid requests.
+### Repair Request Lifecycle:
+- Tenants can create new repair requests for a given property.
+- Landlords can manage these requests by updating work details and changing statuses.
+- Tenants approve or refuse completed work.
 
-3. **Status Management**:
-   - Repair requests follow these statuses:
-     - **Pending**: Initial state after creation.
-     - **InProgress**: Work has started.
-     - **Completed**: Work is marked as completed by the landlord.
-     - **Accepted**: Work is approved by the tenant.
-     - **Refused**: Work is rejected by the tenant.
-     - **Rejected**: Request is rejected by the landlord.
+### Role-Based Access Control (RBAC):
 
-4. **Security Features**:
-   - Input validation for critical data.
-   - Role-based access modifiers (`onlyTenant`, `onlyLandlord`).
-   - Reentrancy protection using OpenZeppelin’s `ReentrancyGuard`.
+#### Tenant (Initiator of the request):
+- Creates repair requests.
+- Updates the repair request description.
+- Approves or rejects completed work.
+- Cancels requests that are still pending.
 
----
+#### Landlord (Assigned to a request):
+- Updates work details (e.g., off-chain work description hash).
+- Transitions the request through its defined lifecycle statuses (e.g., from Pending to InProgress).
+- Can reject requests in the Pending state.
 
-## **Contract Details**
+#### Admin (Holds ADMIN_ROLE):
+- Upgrades the contract implementation (UUPS).
+- Pauses and unpauses the contract for emergency stops.
 
-### **Enums**
+### Request Status Lifecycle:
+Repair requests move through several predefined statuses:
+- **Pending**: Initial state after creation.
+- **InProgress**: Work started by the landlord.
+- **Completed**: Landlord marks work as completed.
+- **Accepted**: Tenant approves the completed work.
+- **Refused**: Tenant rejects the completed work.
+- **Rejected**: Landlord rejects the request (when it's still pending).
+- **Cancelled**: Tenant cancels the request (while it's still pending).
+
+### Security and Reliability:
+- **Custom Errors**: More gas-efficient than string revert reasons.
+- **Pausable**: The contract can be paused by the admin in case of emergencies, halting state-changing actions.
+- **Reentrancy Protection**: Uses OpenZeppelin's ReentrancyGuardUpgradeable to prevent reentrant calls.
+- **Input Validation**: Checks property IDs, description hashes, and roles to avoid invalid inputs.
+
+## Contract Details
+
+### Enums
+
 ```solidity
 enum Status {
-    Pending,        // Request created but not yet acted upon
-    InProgress,     // Work has started
-    Completed,      // Work completed by the landlord
-    Accepted,       // Work approved by the tenant
-    Refused,        // Work rejected by the tenant
-    Rejected        // Request rejected by the landlord
+    Pending,
+    InProgress,
+    Completed,
+    Accepted,
+    Refused,
+    Rejected,
+    Cancelled
 }
 ```
 
-### **Structs**
+### Structs
 
 ```solidity
 struct RepairRequest {
-    uint256 id;                 // Unique identifier
-    address initiator;          // Tenant address
-    address landlord;           // Landlord address
-    string propertyId;          // Reference to property (off-chain)
-    string descriptionHash;     // Hash of the repair description (off-chain)
-    string workDetailsHash;     // Hash of the work details (off-chain)
-    Status status;              // Current status
-    uint256 createdAt;          // Creation timestamp
-    uint256 updatedAt;          // Last update timestamp
+    uint256 id;
+    address initiator;      // Tenant who created the request
+    address landlord;       // Landlord responsible for the property
+    string propertyId;      // Off-chain property reference (e.g., DB key or property identifier)
+    string descriptionHash; // Hash of the repair description stored off-chain
+    string workDetailsHash; // Hash of the work details stored off-chain
+    Status status;          // Current status of the repair request
+    uint256 createdAt;      // Timestamp when created
+    uint256 updatedAt;      // Timestamp of last update
 }
 ```
 
-### **Mappings**
+### Mappings and State
 
 ```solidity
 mapping(uint256 => RepairRequest) private repairRequests;
-uint256 private requestIdCounter; // Counter for unique request IDs
+uint256 private requestIdCounter; // Incremental counter for assigning unique request IDs
 ```
 
-### **Modifiers**
-**requestExists(uint256 _id)**: Ensures the repair request exists.
-**onlyLandlord(uint256 _id)**: Restricts function calls to the landlord of the request.
-**onlyTenant(uint256 _id)**: Restricts function calls to the tenant (initiator) of the request.
+### Access Control
+- `ADMIN_ROLE`: Granted to the contract admin who can pause, unpause, and authorize upgrades.
+- Functions use `onlyTenant(_id)`, `onlyLandlord(_id)`, and `onlyAdmin` modifiers to ensure that only the authorized roles can perform certain actions.
 
-### **Events**
-**RepairRequestCreated**: Emitted when a repair request is created.
-**WorkDetailsUpdated**: Emitted when the landlord updates work details.
-**RepairRequestUpdated**: Emitted when the status of a request is updated.
+### Pausable
+- The `pause()` and `unpause()` functions (restricted to ADMIN_ROLE) can suspend and resume contract operations.
+- Most state-changing functions are gated by `whenNotPaused`.
 
-### **Functions**
+### Events
+- `RepairRequestCreated`: Emitted when a tenant creates a new request.
+- `WorkDetailsUpdated`: Emitted when the landlord updates the off-chain work details.
+- `DescriptionUpdated`: Emitted when the tenant updates the request's description.
+- `RepairRequestStatusChanged`: Emitted whenever the status of a request changes (e.g., Pending -> InProgress, Completed -> Accepted).
 
-1. **Create Repair Request**
+### Custom Errors
+- `RepairRequestDoesNotExist()`: The specified request ID does not exist.
+- `CallerIsNotLandlord()`: Action restricted to the landlord of the request.
+- `CallerIsNotTenant()`: Action restricted to the initiating tenant.
+- `CallerIsNotAdmin()`: Action restricted to an admin.
+- `RequestIsCancelled()`: Action not allowed on a cancelled request.
+- `InvalidPropertyId()`, `InvalidDescriptionHash()`, `InvalidWorkDetailsHash()`: Input validation failures.
+- `ZeroAddress()`: Address input must not be zero.
+- `RequestIsNotPending()`: Action requires the request to be in Pending status.
+- `InvalidStatusTransition(Status oldStatus, Status newStatus)`: Invalid status transition attempted.
+- `RequestNotCompleted()`: Action requires the request to be in Completed status.
 
-    ```solidity
-    function createRepairRequest(
-        string memory _propertyId,
-        string memory _descriptionHash,
-        address _landlord
-    ) external;
-    ```
-* **Purpose**: Allows tenants to create repair requests.
-* **Access**: Any tenant.
-* **Emits**: RepairRequestCreated.
+## Key Functions
 
----
+### createRepairRequest
+Tenant creates a repair request.
 
-2. **Update Work Details**
-
-    ```solidity
-    function updateWorkDetails(uint256 _id, string memory _workDetailsHash) 
-        external;
-    ```
-
-* **Purpose**: Allows landlords to add or update work details.
-* **Access**: Only landlords.
-* **Emits**: WorkDetailsUpdated.
-
---- 
-
-3. **Update Request Status** 
-
-    ```solidity
-    function updateRepairRequestStatus(uint256 _id, Status _status) 
-        external;
-    ```
-
-* **Purpose**: Allows landlords to update the status of a repair request.
-* **Access**: Only landlords.
-* **Emits**: RepairRequestUpdated.
-
----
-
-4. **Approve or Reject Work**
-
-    ```solidity
-    function approveWork(uint256 _id, bool _isAccepted) 
-        external;
-    ```
-* **Purpose**: Allows tenants to approve (Accepted) or reject (Refused) the completed work.
-* **Access**: Only tenants.
-* **Emits**: RepairRequestUpdated.
-
---- 
-
-5. **Get Repair Request**
-
-    ```solidity
-    function getRepairRequest(uint256 _id) 
-        external view returns (RepairRequest memory);
-    ```
-
-* **Purpose**: Fetches details of a specific repair request.
-* **Access**: Public.
-
-## Deployment Information
-### Deployment Checklist
-1. Use Hardhat or Truffle for deployment.
-2. Verify the contract using Etherscan or a similar service.
-3. Ensure roles and permissions are set up properly.
-4. Test on a testnet (e.g., Goerli or Mumbai).
-
-### Deployment Script Example
-
-```javascript
-const hre = require("hardhat");
-
-async function main() {
-    const RepairRequestContract = await hre.ethers.getContractFactory("RepairRequestContract");
-    const contract = await RepairRequestContract.deploy();
-
-    await contract.deployed();
-    console.log("RepairRequestContract deployed to:", contract.address);
-}
-
-main().catch((error) => {
-    console.error(error);
-    process.exitCode = 1;
-});
+```solidity
+function createRepairRequest(
+    string memory _propertyId,
+    string memory _descriptionHash,
+    address _landlord
+) external whenNotPaused;
 ```
+- Emitted: `RepairRequestCreated`
+
+### updateDescription
+Tenant updates the description hash of a request.
+
+```solidity
+function updateDescription(uint256 _id, string memory _descriptionHash) 
+    external whenNotPaused;
+```
+- Requires: `onlyTenant(_id)`
+- Emitted: `DescriptionUpdated`
+
+### updateWorkDetails
+Landlord updates the work details hash of a request.
+
+```solidity
+function updateWorkDetails(uint256 _id, string memory _workDetailsHash) 
+    external whenNotPaused;
+```
+- Requires: `onlyLandlord(_id)`
+- Emitted: `WorkDetailsUpdated`
+
+### updateRepairRequestStatus
+Landlord updates the status of a request.
+
+```solidity
+function updateRepairRequestStatus(uint256 _id, uint256 _status) 
+    external whenNotPaused;
+```
+- Requires: `onlyLandlord(_id)`
+- Emitted: `RepairRequestStatusChanged`
+
+### approveWork
+Tenant approves or rejects completed work.
+
+```solidity
+function approveWork(uint256 _id, bool _isAccepted) 
+    external whenNotPaused;
+```
+- Requires: `onlyTenant(_id)`
+- Emitted: `RepairRequestStatusChanged`
+
+### withdrawRepairRequest
+Tenant cancels a pending request.
+
+```solidity
+function withdrawRepairRequest(uint256 _id) 
+    external whenNotPaused;
+```
+- Requires: `onlyTenant(_id)`
+- Emitted: `RepairRequestStatusChanged`
+
+### getRepairRequest
+View details of a repair request.
+
+```solidity
+function getRepairRequest(uint256 _id)
+    external view returns (RepairRequest memory);
+```
+
+### pause and unpause
+
+```solidity
+function pause() external onlyAdmin;
+function unpause() external onlyAdmin;
+```
+These functions allow the admin to temporarily disable state-changing functions (except for `pause()` and `unpause()` themselves).
+
+## Deployment and Upgradeability
+
+The contract uses the UUPS upgradeable pattern.
+- Admin Role: Only an address with the ADMIN_ROLE can call `_authorizeUpgrade`.
+
+### Deployment Checklist:
+1. Deploy using a script (e.g., Hardhat).
+2. Initialize the contract with an admin address.
+3. Assign roles as needed.
+4. Test upgrade paths on a test network before mainnet deployment.
 
 ## Testing
-### Unit Tests
-Ensure the following scenarios are tested:
 
-1. Creating a repair request with valid inputs.
-2. Role-based access restrictions (onlyTenant, onlyLandlord).
-3. Valid and invalid status transitions.
-4. Handling non-existent repair requests.
+### Recommended Tests:
+- Role Enforcement: Verify that only tenants can create requests, only landlords can update work details, etc.
+- Status Transitions: Check all valid and invalid transitions.
+- Pausable Behavior: Ensure actions fail when contract is paused.
+- Error Handling: Confirm custom errors trigger correctly on invalid inputs or unauthorized actions.
 
-### Sample Test Setup
+## Conclusion
 
-```javascript
-describe("RepairRequestContract", function () {
-    it("Should allow a tenant to create a repair request", async function () {
-        const tx = await contract.createRepairRequest(
-            "property123",
-            "QmHash",
-            landlord.address
-        );
-        await tx.wait();
-
-        const request = await contract.getRepairRequest(1);
-        expect(request.propertyId).to.equal("property123");
-    });
-});
-
-```
-
-## Project Files
-
-### Directory Structure
-```bash
-/contracts
-  - RepairRequestContract.sol
-/scripts
-  - deploy.js
-/test
-  - RepairRequestContract.test.js
-```
-
-## README Links
-- Testing: See test/RepairRequestContract.test.js.
-- Deployment: See scripts/deploy.js.
-- Smart Contract: See contracts/RepairRequestContract.sol.
+The RepairRequestContract provides a secure, upgradeable, and transparent way to manage repair requests in a landlord-tenant context. With controlled status transitions, robust access control, pausing functionality, and custom errors for clarity and efficiency, it is well-suited for decentralized property management systems.
