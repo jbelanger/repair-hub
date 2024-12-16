@@ -168,14 +168,16 @@ export default function AppLayout() {
       </header>
 
       {/* Main Layout */}
-      <div className="flex h-[calc(100vh-4rem)] pt-16">
+      <div className="flex min-h-screen">
         {/* Sidebar */}
         <Sidebar user={user} counts={counts} />
 
         {/* Main Content */}
-        <div className="flex-1 overflow-auto">
-          <Outlet />
-        </div>
+        <main className="flex-1 mt-16 overflow-auto">
+          <div className="h-full p-6">
+            <Outlet />
+          </div>
+        </main>
       </div>
     </div>
   );

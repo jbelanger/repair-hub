@@ -1,5 +1,5 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
-import { Form, Link, useLoaderData, useSearchParams } from "@remix-run/react";
+import { Form, Link, useLoaderData, useNavigate, useSearchParams } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { createUserSession } from "~/utils/session.server";
 import { Button } from "~/components/ui/Button";
@@ -7,6 +7,9 @@ import { Input } from "~/components/ui/Input";
 import { Building2, User } from "lucide-react";
 import { Card } from "~/components/ui/Card";
 import { PageHeader } from "~/components/ui/PageHeader";
+import { useAccount } from 'wagmi';
+import { useEffect } from "react";
+
 
 type ActionData = {
   success?: boolean;
@@ -140,6 +143,15 @@ export default function Register() {
   const { address, plans, existingUser, error } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const selectedPlan = searchParams.get("plan");
+  const navigate = useNavigate();
+  const { isConnected } = useAccount();
+
+  // Redirect to home if wallet disconnects
+  useEffect(() => {
+    if (!isConnected) {
+      navigate('/', { replace: true });
+    }
+  }, [isConnected, navigate]);
 
   if (error) {
     return (
@@ -353,3 +365,4 @@ export default function Register() {
     </div>
   );
 }
+

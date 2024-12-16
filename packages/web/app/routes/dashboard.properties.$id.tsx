@@ -153,11 +153,6 @@ export default function PropertyDetails(): ReactNode {
         title={property.address}
         subtitle="Property Details"
         backTo=".."
-        action={{
-          label: "Invite Tenant",
-          icon: <Plus className="h-5 w-5" />,
-          href: `/dashboard/tenants/invite?propertyId=${property.id}`
-        }}
       />
 
       {/* Stats Overview */}
