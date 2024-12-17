@@ -22,8 +22,7 @@ import { Form } from "@remix-run/react";
 import { ResultAsync } from "neverthrow";
 import { usePublicClient } from 'wagmi'
 import { readRepairRequest } from '~/utils/blockchain/utils/contract-read'
-import { watchRepairRequestEvents } from '~/utils/blockchain/utils/contract-events'
-import { type Log, decodeEventLog } from 'viem'
+import { decodeEventLog } from 'viem'
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -223,12 +222,10 @@ export default function RepairRequestPage() {
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
   const [blockchainState, setBlockchainState] = useState({
     request: null as ContractRepairRequest | null,
-    logs: [] as Log[],
     isLoading: false,
     isError: false
   });
   const mounted = useRef(true);
-  const timeoutRef = useRef<NodeJS.Timeout>();
   const formDataRef = useRef<FormData | null>(null);
   const publicClient = usePublicClient();
 
@@ -337,7 +334,6 @@ export default function RepairRequestPage() {
     }
   }, [addToast, withdrawRequest, updateWorkDetails, updateStatus, approveWork, isProcessing, repairRequest.id, user.address]);
 
-  // Single useEffect to handle all blockchain data and cleanup
   useEffect(() => {
     mounted.current = true;
 
@@ -357,9 +353,6 @@ export default function RepairRequestPage() {
             isError: false,
             isLoading: false
           }));
-          if (mounted.current) {
-            timeoutRef.current = setTimeout(fetchData, 5000);
-          }
         },
         () => {
           setBlockchainState(prev => ({
@@ -367,44 +360,14 @@ export default function RepairRequestPage() {
             isError: true,
             isLoading: false
           }));
-          if (mounted.current) {
-            timeoutRef.current = setTimeout(fetchData, 15000);
-          }
         }
       );
     }
 
-    // Start data fetching
     fetchData();
 
-    // Setup event watching
-    const watchResult = watchRepairRequestEvents(publicClient, (newLogs) => {
-      if (mounted.current) {
-        setBlockchainState(prev => ({
-          ...prev,
-          logs: [
-            ...prev.logs,
-            ...newLogs.filter(newLog => 
-              !prev.logs.some(existingLog => 
-                existingLog.transactionHash === newLog.transactionHash && 
-                existingLog.logIndex === newLog.logIndex
-              )
-            )
-          ]
-        }));
-      }
-    });
-
-    // Cleanup function
     return () => {
       mounted.current = false;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      watchResult.match(
-        ({ unwatch }) => unwatch(),
-        () => {}
-      );
       setIsProcessing(false);
       setWithdrawSuccess(false);
     };
@@ -454,36 +417,6 @@ export default function RepairRequestPage() {
     updatedAt: blockchainState.request.updatedAt,
   } : null;
 
-  const events = blockchainState.logs.map(log => {
-    try {
-      const decoded = decodeEventLog({
-        abi: RepairRequestContractABI,
-        data: log.data,
-        topics: log.topics
-      })
-
-      const type = decoded.eventName === 'RepairRequestCreated' ? 'created'
-        : decoded.eventName === 'RepairRequestStatusChanged' ? 'updated'
-        : decoded.eventName === 'DescriptionUpdated' ? 'hashUpdated'
-        : decoded.eventName === 'WorkDetailsUpdated' ? 'workDetailsUpdated'
-        : 'created'
-
-      return {
-        ...log,
-        type,
-        timestamp: BigInt(Math.floor(Date.now() / 1000)),
-        data: decoded.args
-      } as BlockchainEvent
-    } catch {
-      return {
-        ...log,
-        type: 'created',
-        timestamp: BigInt(Math.floor(Date.now() / 1000)),
-        data: {}
-      } as BlockchainEvent
-    }
-  });
-
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -523,7 +456,7 @@ export default function RepairRequestPage() {
             isLoading={blockchainState.isLoading}
             isError={blockchainState.isError}
             blockchainRequest={transformedBlockchainRequest}
-            events={events}
+            events={[]}
           />
         </div>
 

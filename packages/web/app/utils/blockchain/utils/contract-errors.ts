@@ -3,6 +3,17 @@ import { ContractError } from '../types/repair-request'
 export function parseContractError(error: unknown): ContractError {
   const errorMessage = error instanceof Error ? error.message : String(error);
   
+  // Check for rate limiting and network errors
+  if (errorMessage.includes('exceeded') && errorMessage.includes('limit')) {
+    return { code: 'RATE_LIMIT', message: 'Request limit exceeded. Please try again in a few minutes.' };
+  }
+  if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
+    return { code: 'RATE_LIMIT', message: 'Too many requests. Please try again in a few minutes.' };
+  }
+  if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+    return { code: 'NETWORK_ERROR', message: 'Network connection issue. Please check your connection and try again.' };
+  }
+
   // Check for specific contract errors
   if (errorMessage.includes('RepairRequestDoesNotExist')) {
     return { code: 'NOT_FOUND', message: 'This repair request does not exist' };
@@ -43,8 +54,9 @@ export function parseContractError(error: unknown): ContractError {
     return { code: 'GAS_ESTIMATION', message: 'Unable to estimate gas. The transaction may fail or the contract could be paused.' };
   }
 
+  // Return the original error message for unmatched errors
   return { 
     code: 'UNKNOWN', 
-    message: 'An error occurred while processing the transaction. Please try again.' 
+    message: errorMessage 
   };
 }

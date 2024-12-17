@@ -15,7 +15,6 @@ export function useRepairRequestRead(requestId?: bigint) {
     chainId: sepolia.id,
     query: {
       enabled: !!requestId,
-      refetchInterval: 5000,
       retry: false,
       gcTime: 30000,
       staleTime: 2000

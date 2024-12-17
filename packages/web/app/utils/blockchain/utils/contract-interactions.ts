@@ -9,6 +9,42 @@ import { usePublicClient } from 'wagmi'
 
 type PublicClient = NonNullable<ReturnType<typeof usePublicClient>>
 
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function retryWithBackoff<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let retries = 0;
+  let lastError: Error | null = null;
+
+  while (retries < maxRetries) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error as Error;
+      const errorMessage = lastError.message.toLowerCase();
+      
+      // Only retry on rate limit errors
+      if (!errorMessage.includes('limit') && !errorMessage.includes('429')) {
+        throw error;
+      }
+
+      retries++;
+      if (retries === maxRetries) {
+        throw error;
+      }
+
+      // Exponential backoff: 1s, 2s, 4s, etc.
+      const backoffDelay = initialDelay * Math.pow(2, retries - 1);
+      await delay(backoffDelay);
+    }
+  }
+
+  throw lastError;
+}
+
 export const waitForTransaction = (
   publicClient: PublicClient | null,
   hash: HexString
@@ -21,8 +57,13 @@ export const waitForTransaction = (
   }
   
   return ResultAsync.fromPromise(
-    publicClient.waitForTransactionReceipt({ hash }),
-    () => ({ code: 'TRANSACTION_FAILED', message: 'Failed to process transaction' })
+    retryWithBackoff(() => publicClient.waitForTransactionReceipt({ hash })),
+    (error) => {
+      if (error instanceof Error && error.message.toLowerCase().includes('limit')) {
+        return { code: 'RATE_LIMIT', message: 'Rate limit exceeded. Please try again in a few minutes.' };
+      }
+      return { code: 'TRANSACTION_FAILED', message: 'Failed to process transaction' };
+    }
   );
 };
 
@@ -47,8 +88,13 @@ export const estimateGas = <T extends ContractFunctionName>(
   };
 
   return ResultAsync.fromPromise(
-    publicClient.estimateContractGas(params),
-    () => ({ code: 'GAS_ESTIMATION', message: 'Failed to estimate gas' })
+    retryWithBackoff(() => publicClient.estimateContractGas(params)),
+    (error) => {
+      if (error instanceof Error && error.message.toLowerCase().includes('limit')) {
+        return { code: 'RATE_LIMIT', message: 'Rate limit exceeded. Please try again in a few minutes.' };
+      }
+      return { code: 'GAS_ESTIMATION', message: 'Failed to estimate gas' };
+    }
   ).map((gasEstimate: unknown) => {
     const estimate = gasEstimate as bigint;
     return (estimate * 400n) / 100n; // Add 200% buffer

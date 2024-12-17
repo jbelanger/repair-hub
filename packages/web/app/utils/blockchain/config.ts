@@ -11,8 +11,16 @@ const REPAIR_REQUEST_CONTRACT = typeof document !== 'undefined'
   ? import.meta.env.VITE_REPAIR_REQUEST_CONTRACT
   : process.env.VITE_REPAIR_REQUEST_CONTRACT;
 
+const INFURA_API_KEY = typeof document !== 'undefined'
+  ? import.meta.env.VITE_INFURA_API_KEY
+  : process.env.VITE_INFURA_API_KEY;
+
 if (!WALLETCONNECT_PROJECT_ID) {
   console.error('Missing VITE_WALLETCONNECT_PROJECT_ID environment variable');
+}
+
+if (!INFURA_API_KEY) {
+  console.error('Missing VITE_INFURA_API_KEY environment variable');
 }
 
 export const CONTRACT_ADDRESSES = {
@@ -48,8 +56,7 @@ export const config = getDefaultConfig({
   chains: [sepolia],
   transports: {
     [sepolia.id]: http(
-      // You can add an Infura/Alchemy URL here if needed
-      // `https://sepolia.infura.io/v3/${INFURA_ID}`
+      `https://sepolia.infura.io/v3/${INFURA_API_KEY}`
     )
   },
   ssr: true, // Enable SSR mode

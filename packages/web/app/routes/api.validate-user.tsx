@@ -1,17 +1,19 @@
 import { json, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
 import { db } from "~/utils/db.server";
-import { sessionStorage } from "~/utils/session.server";
+import { createUserSession } from "~/utils/session.server";
+import { toChecksumAddress } from "~/utils/blockchain/types";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
-  const address = url.searchParams.get("address")?.toLowerCase();
+  const address = url.searchParams.get("address");
 
   if (!address) {
     return json({ exists: false, role: null });
   }
 
+  const checksumAddress = toChecksumAddress(address);
   const user = await db.user.findUnique({
-    where: { address },
+    where: { address: checksumAddress },
     select: { role: true }
   });
 
@@ -23,14 +25,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
-  const address = (formData.get("address") as string)?.toLowerCase();
+  const address = formData.get("address") as string;
+  const redirectTo = formData.get("redirectTo") as string || "/dashboard";
 
   if (!address) {
     return json({ success: false, error: "Address is required" });
   }
 
+  const checksumAddress = toChecksumAddress(address);
   const user = await db.user.findUnique({
-    where: { address },
+    where: { address: checksumAddress },
     select: { id: true, role: true }
   });
 
@@ -38,16 +42,6 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ success: false, error: "User not found" });
   }
 
-  // Create a session for the existing user
-  const session = await sessionStorage.getSession();
-  session.set("userId", user.id);
-
-  return json(
-    { success: true, role: user.role },
-    {
-      headers: {
-        "Set-Cookie": await sessionStorage.commitSession(session),
-      },
-    }
-  );
+  // Create a session using our simplified session management
+  return createUserSession(user.id, redirectTo);
 }
