@@ -23,6 +23,7 @@ import { ResultAsync } from "neverthrow";
 import { usePublicClient } from 'wagmi'
 import { readRepairRequest } from '~/utils/blockchain/utils/contract-read'
 import { decodeEventLog } from 'viem'
+import { CONTRACT_ADDRESSES } from "~/utils/blockchain/config";
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -220,6 +221,10 @@ export default function RepairRequestPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showLandlordView, setShowLandlordView] = useState(user.role === "LANDLORD");
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{
+    type: 'withdraw' | 'status' | 'workDetails';
+    expectedValue?: string | number;
+  } | null>(null);
   const [blockchainState, setBlockchainState] = useState({
     request: null as ContractRepairRequest | null,
     isLoading: false,
@@ -228,6 +233,106 @@ export default function RepairRequestPage() {
   const mounted = useRef(true);
   const formDataRef = useRef<FormData | null>(null);
   const publicClient = usePublicClient();
+
+  // Watch for blockchain events
+  useEffect(() => {
+    if (!publicClient || !mounted.current || !isProcessing || !pendingAction) return;
+
+    const unwatchCallbacks: (() => void)[] = [];
+
+    // Watch for all status changes (including withdraw and approve)
+    const unwatch = publicClient.watchContractEvent({
+      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
+      abi: RepairRequestContractABI,
+      eventName: 'RepairRequestStatusChanged',
+      onLogs: (logs) => {
+        logs.forEach(log => {
+          try {
+            const decoded = decodeEventLog({
+              abi: RepairRequestContractABI,
+              data: log.data,
+              topics: log.topics
+            });
+            const args = decoded.args as any;
+            
+            if (args.id.toString() === repairRequest.id) {
+              const newStatus = Number(args.newStatus);
+              if (mounted.current) {
+                switch (newStatus) {
+                  case RepairRequestStatusType.CANCELLED:
+                    addToast("Request has been successfully withdrawn", "success", "Withdrawal Successful");
+                    setWithdrawSuccess(true);
+                    break;
+                  case RepairRequestStatusType.ACCEPTED:
+                    addToast("Work has been approved", "success", "Update Successful");
+                    setPendingAction(null);
+                    break;
+                  case RepairRequestStatusType.REFUSED:
+                    addToast("Work has been refused", "success", "Update Successful");
+                    setPendingAction(null);
+                    break;
+                  case RepairRequestStatusType.REJECTED:
+                    addToast("Request has been rejected", "success", "Update Successful");
+                    setPendingAction(null);
+                    break;
+                  case RepairRequestStatusType.IN_PROGRESS:
+                    addToast("Work has started", "success", "Update Successful");
+                    setPendingAction(null);
+                    break;
+                  case RepairRequestStatusType.COMPLETED:
+                    addToast("Work has been completed", "success", "Update Successful");
+                    setPendingAction(null);
+                    break;
+                  default:
+                    addToast("Status has been updated", "success", "Update Successful");
+                    setPendingAction(null);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error handling status change event:', error);
+          }
+        });
+      }
+    });
+    unwatchCallbacks.push(unwatch);
+
+    // Watch for work details updates
+    if (pendingAction.type === 'workDetails') {
+      const unwatch = publicClient.watchContractEvent({
+        address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
+        abi: RepairRequestContractABI,
+        eventName: 'WorkDetailsUpdated',
+        onLogs: (logs) => {
+          logs.forEach(log => {
+            try {
+              const decoded = decodeEventLog({
+                abi: RepairRequestContractABI,
+                data: log.data,
+                topics: log.topics
+              });
+              const args = decoded.args as any;
+              
+              if (args.id.toString() === repairRequest.id && 
+                  args.newHash === pendingAction.expectedValue) {
+                if (mounted.current) {
+                  addToast("Work details have been updated", "success", "Update Successful");
+                  setPendingAction(null);
+                }
+              }
+            } catch (error) {
+              console.error('Error handling work details event:', error);
+            }
+          });
+        }
+      });
+      unwatchCallbacks.push(unwatch);
+    }
+
+    return () => {
+      unwatchCallbacks.forEach(unwatch => unwatch());
+    };
+  }, [publicClient, isProcessing, pendingAction, repairRequest.id]);
 
   const handleBlockchainTransaction = useCallback(async (
     action: string,
@@ -259,8 +364,7 @@ export default function RepairRequestPage() {
         await result.match(
           async () => {
             if (!mounted.current) return;
-            setWithdrawSuccess(true);
-            addToast("Request has been successfully withdrawn", "success", "Withdrawal Successful");
+            setPendingAction({ type: 'withdraw' });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
@@ -277,7 +381,7 @@ export default function RepairRequestPage() {
         await result.match(
           async () => {
             if (!mounted.current) return;
-            addToast("Work details have been updated", "success", "Update Successful");
+            setPendingAction({ type: 'workDetails', expectedValue: workDetailsHash });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
@@ -294,7 +398,7 @@ export default function RepairRequestPage() {
         await result.match(
           async () => {
             if (!mounted.current) return;
-            addToast("Status has been updated", "success", "Update Successful");
+            setPendingAction({ type: 'status', expectedValue: statusValue });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
@@ -312,11 +416,10 @@ export default function RepairRequestPage() {
         await result.match(
           async () => {
             if (!mounted.current) return;
-            addToast(
-              `Work has been ${isAccepted ? 'approved' : 'refused'}`,
-              "success",
-              "Update Successful"
-            );
+            setPendingAction({ 
+              type: 'status', 
+              expectedValue: isAccepted ? RepairRequestStatusType.ACCEPTED : RepairRequestStatusType.REFUSED 
+            });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
@@ -327,6 +430,7 @@ export default function RepairRequestPage() {
     } catch (error: any) {
       if (!mounted.current) return;
       addToast(error.message || "Failed to complete the transaction", "error", "Transaction Failed");
+      setPendingAction(null);
     } finally {
       if (mounted.current) {
         setIsProcessing(false);
@@ -370,6 +474,7 @@ export default function RepairRequestPage() {
       mounted.current = false;
       setIsProcessing(false);
       setWithdrawSuccess(false);
+      setPendingAction(null);
     };
   }, [publicClient, repairRequest.id]);
 

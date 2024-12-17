@@ -1,4 +1,4 @@
-import { useWriteContract, usePublicClient } from 'wagmi'
+import { useWriteContract, usePublicClient, useAccount } from 'wagmi'
 import { type Address, type HexString } from '../types'
 import { RepairRequestContractABI } from '../abis/RepairRequestContract'
 import { CONTRACT_ADDRESSES, RepairRequestStatusType } from '../config'
@@ -21,6 +21,7 @@ import { decodeEventLog, type TransactionReceipt } from 'viem'
 export function useRepairRequest() {
   const { writeContractAsync, isPending, isSuccess, error } = useWriteContract()
   const publicClient = usePublicClient()
+  const { isConnected } = useAccount()
 
   const checkRateLimitAndClient = async () => {
     if (!publicClient) {
@@ -46,6 +47,10 @@ export function useRepairRequest() {
   ): Promise<ResultAsync<BlockchainRepairRequestResult, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
+        if (!isConnected) {
+          throw new Error('Please connect your wallet to continue');
+        }
+
         const client = await checkRateLimitAndClient();
         const gasLimitResult = await estimateGas(client, 'createRepairRequest', [propertyId, descriptionHash, landlord]);
         const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
@@ -106,11 +111,11 @@ export function useRepairRequest() {
   ): Promise<ResultAsync<TransactionReceipt, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
-        const client = await checkRateLimitAndClient();
-        if (!client.account) {
-          throw new Error('No account connected');
+        if (!isConnected) {
+          throw new Error('Please connect your wallet to continue');
         }
 
+        const client = await checkRateLimitAndClient();
         const gasLimitResult = await estimateGas(client, 'updateRepairRequestStatus', [requestId, BigInt(status)]);
         const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
 
@@ -138,6 +143,10 @@ export function useRepairRequest() {
   ): Promise<ResultAsync<TransactionReceipt, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
+        if (!isConnected) {
+          throw new Error('Please connect your wallet to continue');
+        }
+
         const client = await checkRateLimitAndClient();
         const gasLimitResult = await estimateGas(client, 'updateWorkDetails', [requestId, workDetailsHash]);
         const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
@@ -165,11 +174,11 @@ export function useRepairRequest() {
   ): Promise<ResultAsync<TransactionReceipt, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
-        const client = await checkRateLimitAndClient();
-        if (!client.account) {
-          throw new Error('No account connected');
+        if (!isConnected) {
+          throw new Error('Please connect your wallet to continue');
         }
 
+        const client = await checkRateLimitAndClient();
         const gasLimitResult = await estimateGas(client, 'withdrawRepairRequest', [requestId]);
         const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
 
@@ -197,11 +206,11 @@ export function useRepairRequest() {
   ): Promise<ResultAsync<TransactionReceipt, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
-        const client = await checkRateLimitAndClient();
-        if (!client.account) {
-          throw new Error('No account connected');
+        if (!isConnected) {
+          throw new Error('Please connect your wallet to continue');
         }
 
+        const client = await checkRateLimitAndClient();
         const gasLimitResult = await estimateGas(client, 'approveWork', [requestId, isAccepted]);
         const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
 
@@ -236,4 +245,3 @@ export function useRepairRequest() {
 }
 
 export { useRepairRequestRead } from './useRepairRequestRead';
-export { useRepairRequestEvents } from './useRepairRequestEvents';

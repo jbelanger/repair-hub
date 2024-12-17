@@ -1,10 +1,9 @@
-import { useWatchContractEvent } from 'wagmi'
 import { type Address, type HexString } from '../types'
 import { RepairRequestContractABI } from '../abis/RepairRequestContract'
 import { CONTRACT_ADDRESSES, RepairRequestStatusType } from '../config'
 import { Result } from 'neverthrow'
 import { ContractError, DecodedEventArgs } from '../types/repair-request'
-import { decodeEventLog, type Log } from 'viem'
+import { decodeEventLog, type Log, type PublicClient } from 'viem'
 
 export interface RepairRequestEventCallbacks {
   onCreated?: (
@@ -90,108 +89,24 @@ const isHashUpdateEvent = (args: DecodedEventArgs): args is DecodedEventArgs & {
   updatedAt: bigint;
 } => 'oldHash' in args && 'newHash' in args;
 
-export function useRepairRequestEvents(callbacks: RepairRequestEventCallbacks) {
-  useWatchContractEvent({
+// Function to watch a specific event type
+export function watchEvent(
+  client: PublicClient,
+  eventName: 'RepairRequestCreated' | 'RepairRequestStatusChanged' | 'DescriptionUpdated' | 'WorkDetailsUpdated',
+  onLogs: (logs: Log[]) => void
+) {
+  return client.watchContractEvent({
     address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
     abi: RepairRequestContractABI,
-    eventName: 'RepairRequestCreated',
-    onLogs: (logs) => {
-      if (!callbacks.onCreated) return;
-      
-      const decoder = createEventDecoder('RepairRequestCreated', isCreatedEvent);
-      
-      for (const log of logs) {
-        const result = decoder(log);
-        if (result.isOk()) {
-          const args = result.value;
-          callbacks.onCreated(
-            args.id,
-            args.initiator,
-            args.landlord,
-            args.propertyId as HexString,
-            args.descriptionHash as HexString,
-            args.createdAt
-          );
-        }
-      }
-    }
-  });
-
-  useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
-    abi: RepairRequestContractABI,
-    eventName: 'RepairRequestStatusChanged',
-    onLogs: (logs) => {
-      if (!callbacks.onStatusChanged) return;
-      
-      const decoder = createEventDecoder('RepairRequestStatusChanged', isStatusChangedEvent);
-      
-      for (const log of logs) {
-        const result = decoder(log);
-        if (result.isOk()) {
-          const args = result.value;
-          callbacks.onStatusChanged(
-            args.id,
-            args.initiator,
-            args.landlord,
-            Number(args.oldStatus) as RepairRequestStatusType,
-            Number(args.newStatus) as RepairRequestStatusType,
-            args.updatedAt
-          );
-        }
-      }
-    }
-  });
-
-  useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
-    abi: RepairRequestContractABI,
-    eventName: 'DescriptionUpdated',
-    onLogs: (logs) => {
-      if (!callbacks.onDescriptionUpdated) return;
-      
-      const decoder = createEventDecoder('DescriptionUpdated', isHashUpdateEvent);
-      
-      for (const log of logs) {
-        const result = decoder(log);
-        if (result.isOk()) {
-          const args = result.value;
-          callbacks.onDescriptionUpdated(
-            args.id,
-            args.initiator,
-            args.landlord,
-            args.oldHash as HexString,
-            args.newHash as HexString,
-            args.updatedAt
-          );
-        }
-      }
-    }
-  });
-
-  useWatchContractEvent({
-    address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
-    abi: RepairRequestContractABI,
-    eventName: 'WorkDetailsUpdated',
-    onLogs: (logs) => {
-      if (!callbacks.onWorkDetailsUpdated) return;
-      
-      const decoder = createEventDecoder('WorkDetailsUpdated', isHashUpdateEvent);
-      
-      for (const log of logs) {
-        const result = decoder(log);
-        if (result.isOk()) {
-          const args = result.value;
-          callbacks.onWorkDetailsUpdated(
-            args.id,
-            args.initiator,
-            args.landlord,
-            args.oldHash as HexString,
-            args.newHash as HexString,
-            args.updatedAt
-          );
-        }
-      }
-    }
+    eventName,
+    onLogs
   });
 }
+
+// Export event decoders for direct use
+export const eventDecoders = {
+  created: createEventDecoder('RepairRequestCreated', isCreatedEvent),
+  statusChanged: createEventDecoder('RepairRequestStatusChanged', isStatusChangedEvent),
+  descriptionUpdated: createEventDecoder('DescriptionUpdated', isHashUpdateEvent),
+  workDetailsUpdated: createEventDecoder('WorkDetailsUpdated', isHashUpdateEvent)
+};

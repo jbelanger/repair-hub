@@ -83,8 +83,7 @@ export const estimateGas = <T extends ContractFunctionName>(
     address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
     abi: RepairRequestContractABI,
     functionName: functionName,
-    args: args,
-    account: publicClient.account,
+    args: args
   };
 
   return ResultAsync.fromPromise(

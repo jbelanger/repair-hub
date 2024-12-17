@@ -22,7 +22,6 @@ export function useRepairRequestData(requestId: string) {
 
   useEffect(() => {
     mounted.current = true
-    let timeoutId: NodeJS.Timeout
 
     async function fetchData() {
       if (!publicClient || !mounted.current) return
@@ -47,19 +46,12 @@ export function useRepairRequestData(requestId: string) {
 
       setState(resolvedResult)
       setIsLoading(false)
-
-      // Schedule next fetch based on result
-      timeoutId = setTimeout(
-        fetchData,
-        resolvedResult.isError ? 15000 : 5000
-      )
     }
 
     fetchData()
 
     return () => {
       mounted.current = false
-      clearTimeout(timeoutId)
     }
   }, [publicClient, requestId])
 

@@ -16,8 +16,14 @@ export function useRepairRequestRead(requestId?: bigint) {
     query: {
       enabled: !!requestId,
       retry: false,
-      gcTime: 30000,
-      staleTime: 2000
+      // Disable automatic refetching
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+      refetchOnWindowFocus: false,
+      // Keep data fresh for longer
+      staleTime: Infinity,
+      // Cache for 5 minutes
+      gcTime: 300000
     }
   })
 
