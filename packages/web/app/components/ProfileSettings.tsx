@@ -4,12 +4,18 @@ import { Input } from "./ui/Input";
 import { Card } from "./ui/Card";
 import { User } from "@prisma/client";
 import { User as UserIcon } from "lucide-react";
+import { FormField, FormSection, FormActions, FormError } from "./ui/Form";
 
 interface ProfileSettingsProps {
-  user: User;
+  user: Omit<User, 'createdAt' | 'updatedAt'> & {
+    createdAt: string;
+    updatedAt: string;
+  };
+  isSubmitting?: boolean;
+  error?: string;
 }
 
-export function ProfileSettings({ user }: ProfileSettingsProps) {
+export function ProfileSettings({ user, isSubmitting, error }: ProfileSettingsProps) {
   return (
     <Card
       variant="default"
@@ -21,38 +27,31 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
         iconBackground: true
       }}
     >
-      <Form method="post" action="/api/update-profile" className="space-y-6">
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="name" className="block text-sm font-medium text-white/70">
-              Full Name
-            </label>
+      <Form method="post" className="space-y-6">
+        <FormSection className="space-y-4">
+          <FormField label="Full Name">
             <Input
               id="name"
               name="name"
               type="text"
               defaultValue={user.name}
               placeholder="Your full name"
+              required
             />
-          </div>
+          </FormField>
 
-          <div className="space-y-2">
-            <label htmlFor="email" className="block text-sm font-medium text-white/70">
-              Email Address
-            </label>
+          <FormField label="Email Address">
             <Input
               id="email"
               name="email"
               type="email"
               defaultValue={user.email}
               placeholder="you@example.com"
+              required
             />
-          </div>
+          </FormField>
 
-          <div className="space-y-2">
-            <label htmlFor="phone" className="block text-sm font-medium text-white/70">
-              Phone Number
-            </label>
+          <FormField label="Phone Number">
             <Input
               id="phone"
               name="phone"
@@ -60,35 +59,30 @@ export function ProfileSettings({ user }: ProfileSettingsProps) {
               defaultValue={user.phone || ""}
               placeholder="Your phone number"
             />
-          </div>
+          </FormField>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/70">
-              Ethereum Address
-            </label>
+          <FormField label="Ethereum Address">
             <div className="text-sm font-mono bg-white/5 rounded-lg p-3 break-all">
               {user.address}
             </div>
             <p className="text-sm text-white/50 mt-1">
               Your Ethereum address is used for blockchain operations and cannot be changed
             </p>
-          </div>
+          </FormField>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-white/70">
-              Account Type
-            </label>
+          <FormField label="Account Type">
             <div className="text-sm bg-white/5 rounded-lg p-3">
               {user.role.charAt(0) + user.role.slice(1).toLowerCase()}
             </div>
-          </div>
-        </div>
+          </FormField>
+        </FormSection>
 
-        <div className="pt-4">
-          <Button type="submit" className="w-full">
-            Save Changes
-          </Button>
-        </div>
+        <FormError error={error} />
+
+        <FormActions
+          submitLabel={isSubmitting ? "Saving..." : "Save Changes"}
+          isSubmitting={isSubmitting}
+        />
       </Form>
     </Card>
   );

@@ -1,5 +1,5 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData, Link } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { Search, Plus, ClipboardList, ArrowRight } from 'lucide-react';
 import { Input } from "~/components/ui/Input";
@@ -130,32 +130,36 @@ export default function RepairRequests() {
           } : undefined
         }}
         renderItem={(request) => (
-          <Card
-            variant="interactive"
-            accent="purple"
-            header={{
-              title: request.property.address,
-              subtitle: user.role === 'LANDLORD' ? `Submitted by ${request.initiator.name}` : undefined,
-              extra: <RepairStatus status={request.status} />
-            }}
-          >
-            <div className="p-6">
-              <p className="text-sm text-white/70 line-clamp-2 mb-4">
-                {request.description}
-              </p>
-              <div className="flex justify-between items-center">
-                <RepairUrgency urgency={request.urgency} />
-                <LinkButton
-                  to={`${request.id}`}
-                  variant="ghost"
-                  size="sm"
-                  rightIcon={<ArrowRight className="h-4 w-4" />}
-                >
-                  View Details
-                </LinkButton>
+          <Link to={`${request.id}`} className="block">
+            <Card
+              variant="interactive"
+              accent="purple"
+              header={{
+                title: request.property.address,
+                subtitle: user.role === 'LANDLORD' ? `Submitted by ${request.initiator.name}` : undefined,
+                extra: <RepairStatus status={request.status} />
+              }}
+            >
+              <div className="p-4 space-y-3">
+                <div>
+                  <div className="text-sm font-medium text-white/50 mb-1">Description</div>
+                  <p className="text-sm text-white/70 line-clamp-2">
+                    {request.description}
+                  </p>
+                </div>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="text-sm font-medium text-white/50 mb-1">Priority</div>
+                    <RepairUrgency urgency={request.urgency} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-white/50 mb-1">Status</div>
+                    <RepairStatus status={request.status} />
+                  </div>
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </Link>
         )}
       />
 

@@ -245,12 +245,21 @@ export default function CreateRepairRequest() {
           
           submit(formData, { method: "post" });
           setIsWaitingForEvent(false);
+          addToast(
+            "Your repair request has been successfully created on the blockchain",
+            "success",
+            "Blockchain Transaction Confirmed"
+          );
         } catch (error) {
           console.error("Database error:", error);
-          setBlockchainError(
-            error instanceof Error ? error.message : "Failed to save repair request to database"
-          );
+          const errorMessage = error instanceof Error ? error.message : "Failed to save repair request to database";
+          setBlockchainError(errorMessage);
           setIsWaitingForEvent(false);
+          addToast(
+            errorMessage,
+            "error",
+            "Database Error"
+          );
         }
       }
     },
@@ -263,6 +272,12 @@ export default function CreateRepairRequest() {
       try {
         setBlockchainError(undefined);
         setIsWaitingForEvent(true);
+        addToast(
+          "Please confirm the transaction in your wallet",
+          "info",
+          "Creating Repair Request"
+        );
+        
         const { propertyId, description } = actionData.fields;
         const selectedProperty = properties.find(p => p.id === propertyId);
         if (!selectedProperty) {
@@ -274,10 +289,14 @@ export default function CreateRepairRequest() {
         await createRepairRequest(blockchainPropertyId, descriptionHash, selectedProperty.landlordAddress);
       } catch (error) {
         console.error("Blockchain error:", error);
-        setBlockchainError(
-          error instanceof Error ? error.message : "Failed to create repair request on blockchain"
-        );
+        const errorMessage = error instanceof Error ? error.message : "Failed to create repair request on blockchain";
+        setBlockchainError(errorMessage);
         setIsWaitingForEvent(false);
+        addToast(
+          errorMessage,
+          "error",
+          "Blockchain Error"
+        );
       }
     }
   };
@@ -310,7 +329,7 @@ export default function CreateRepairRequest() {
             <Form method="post">
               <input type="hidden" name="_stage" value="validate" />
               
-              <FormSection>
+              <FormSection className="mb-6">
                 <FormField label="Property">
                   <Select
                     name="propertyId"
@@ -359,12 +378,6 @@ export default function CreateRepairRequest() {
               {actionData?.success && actionData.stage === 'validate' && (
                 <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 text-green-200 mb-6">
                   Form validated successfully. {isWaitingForEvent ? "Waiting for blockchain confirmation..." : "Ready to create on blockchain."}
-                </div>
-              )}
-
-              {isWaitingForEvent && (
-                <div className="mb-6">
-                  <Skeleton className="h-12" />
                 </div>
               )}
 

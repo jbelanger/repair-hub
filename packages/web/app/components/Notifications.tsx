@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Bell, Check, X } from "lucide-react";
 import { Form } from "@remix-run/react";
 
@@ -25,7 +25,27 @@ interface NotificationsProps {
 
 export function Notifications({ invitations, notifications }: NotificationsProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const unreadCount = invitations.length + notifications.filter(n => !n.read).length;
+
+  // Handle click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current && 
+        buttonRef.current &&
+        !dropdownRef.current.contains(event.target as Node) &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
+        handleClose();
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Mark notifications as read when dropdown is opened
   useEffect(() => {
@@ -44,12 +64,27 @@ export function Notifications({ invitations, notifications }: NotificationsProps
     }
   }, [isOpen, notifications]);
 
+  const handleClose = () => {
+    setIsAnimating(true);
+    setTimeout(() => {
+      setIsOpen(false);
+      setIsAnimating(false);
+    }, 200);
+  };
+
+  const handleOpen = () => {
+    setIsOpen(true);
+    setIsAnimating(true);
+    setTimeout(() => setIsAnimating(false), 200);
+  };
+
   return (
     <div className="relative">
       {/* Bell Icon with Badge */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)] relative"
+        ref={buttonRef}
+        onClick={() => isOpen ? handleClose() : handleOpen()}
+        className="p-2 rounded-lg transition-all duration-200 hover:bg-purple-500/20 relative"
         style={{ color: 'var(--color-text-secondary)' }}
       >
         <Bell className="h-5 w-5" />
@@ -63,42 +98,62 @@ export function Notifications({ invitations, notifications }: NotificationsProps
       {/* Dropdown */}
       {isOpen && (
         <div 
-          className="absolute right-0 mt-2 w-80 rounded-lg shadow-lg overflow-hidden z-50"
+          ref={dropdownRef}
+          className={`absolute right-0 mt-4 w-80 rounded-xl overflow-hidden z-50 bg-gray-900 border-2 border-purple-500/30 transition-all duration-200 origin-top
+            ${isAnimating ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}
+          `}
           style={{
-            backgroundColor: 'var(--card-bg)',
-            border: '1px solid var(--card-border)'
+            boxShadow: '0 0 20px rgba(168, 85, 247, 0.15)',
+            transform: `translateY(${isAnimating ? '-8px' : '0'})`
           }}
         >
-          <div className="p-4 border-b" style={{ borderColor: 'var(--card-border)' }}>
-            <h3 className="font-medium">Notifications</h3>
+          <div className="px-4 py-3 border-b border-purple-500/30 flex justify-between items-center bg-gray-900/80">
+            <h3 className="font-medium text-white">Notifications</h3>
+            <button
+              onClick={handleClose}
+              className="p-1 rounded-lg hover:bg-purple-500/20 transition-colors text-gray-400 hover:text-white"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
 
-          <div className="max-h-96 overflow-y-auto">
+          <div 
+            className={`max-h-[28rem] overflow-y-auto bg-gray-900/95 transition-all duration-300
+              ${isAnimating ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}
+            `}
+          >
             {invitations.length === 0 && notifications.length === 0 ? (
-              <div className="p-4 text-center" style={{ color: 'var(--color-text-secondary)' }}>
+              <div className="p-4 text-center text-gray-400">
                 No new notifications
               </div>
             ) : (
-              <div className="divide-y" style={{ borderColor: 'var(--card-border)' }}>
+              <ul className="divide-y divide-purple-500/20">
                 {/* Invitations */}
-                {invitations.map((invitation) => (
-                  <div key={invitation.id} className="p-4">
+                {invitations.map((invitation, index) => (
+                  <li 
+                    key={invitation.id} 
+                    className="p-4 hover:bg-purple-500/10 transition-all duration-200"
+                    style={{
+                      animationDelay: `${index * 50}ms`,
+                      animation: isAnimating ? 'none' : 'slideIn 0.3s ease-out forwards'
+                    }}
+                  >
                     <div className="mb-2">
-                      <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                      <p className="font-medium text-white">
                         Property Invitation
                       </p>
-                      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                      <p className="text-sm text-emerald-400 mt-1">
                         {invitation.propertyAddress}
                       </p>
-                      <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                      <p className="text-sm text-gray-400 mt-1">
                         {new Date(invitation.startDate).toLocaleDateString()} - {new Date(invitation.endDate).toLocaleDateString()}
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 mt-3">
                       <Form method="post" action={`/api/invitations/${invitation.id}/accept`}>
                         <button
                           type="submit"
-                          className="flex items-center gap-1 px-3 py-1 rounded-full text-sm bg-purple-600 text-white hover:bg-purple-500 transition-colors"
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-purple-600 text-white hover:bg-purple-500 transition-all duration-200 hover:shadow-lg hover:shadow-purple-500/20"
                         >
                           <Check className="h-4 w-4" />
                           Accept
@@ -107,38 +162,55 @@ export function Notifications({ invitations, notifications }: NotificationsProps
                       <Form method="post" action={`/api/invitations/${invitation.id}/decline`}>
                         <button
                           type="submit"
-                          className="flex items-center gap-1 px-3 py-1 rounded-full text-sm hover:bg-[var(--color-bg-tertiary)] transition-colors"
-                          style={{ color: 'var(--color-text-secondary)' }}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm bg-gray-800 text-gray-300 hover:bg-gray-700 transition-all duration-200"
                         >
                           <X className="h-4 w-4" />
                           Decline
                         </button>
                       </Form>
                     </div>
-                  </div>
+                  </li>
                 ))}
 
                 {/* General Notifications */}
-                {notifications.map((notification) => (
-                  <div key={notification.id} className="p-4">
-                    <div>
-                      <p className="font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                        {notification.title}
-                      </p>
-                      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                        {notification.message}
-                      </p>
-                      <p className="text-xs mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                        {new Date(notification.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
+                {notifications.map((notification, index) => (
+                  <li 
+                    key={notification.id} 
+                    className="p-4 hover:bg-purple-500/10 transition-all duration-200"
+                    style={{
+                      animationDelay: `${(invitations.length + index) * 50}ms`,
+                      animation: isAnimating ? 'none' : 'slideIn 0.3s ease-out forwards'
+                    }}
+                  >
+                    <p className="font-medium text-white">
+                      {notification.title}
+                    </p>
+                    <p className="text-sm text-emerald-400 mt-1">
+                      {notification.message}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                      {new Date(notification.createdAt).toLocaleString()}
+                    </p>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import {
   useWriteContract,
   useWatchContractEvent
 } from 'wagmi'
+import { type Log, decodeEventLog } from 'viem'
 import { RepairRequestContractABI } from '../abis/RepairRequestContract'
 import { CONTRACT_ADDRESSES, RepairRequest, RepairRequestStatusType } from '../config'
 import { type Address, type HexString } from '../types'
@@ -10,6 +11,27 @@ import { type Address, type HexString } from '../types'
 interface BlockchainRepairRequestResult {
   id: bigint;
   hash: HexString;
+}
+
+interface ContractWriteResult {
+  hash: HexString;
+  wait: () => Promise<{ logs: Log[] }>;
+}
+
+interface ContractEventLog extends Log {
+  args?: {
+    id?: bigint;
+    initiator?: string;
+    landlord?: string;
+    propertyId?: string;
+    descriptionHash?: string;
+    oldHash?: string;
+    newHash?: string;
+    oldStatus?: bigint;
+    newStatus?: bigint;
+    createdAt?: bigint;
+    updatedAt?: bigint;
+  };
 }
 
 export function useRepairRequest() {
@@ -21,21 +43,45 @@ export function useRepairRequest() {
     landlord: Address
   ): Promise<BlockchainRepairRequestResult> => {
     try {
-      const hash = await writeContractAsync({
+      const result = await writeContractAsync({
         address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
         abi: RepairRequestContractABI,
         functionName: 'createRepairRequest',
         args: [propertyId, descriptionHash, landlord],
+      }) as unknown as ContractWriteResult
+
+      // Wait for transaction to be mined to get logs
+      const receipt = await result.wait()
+      const event = receipt.logs.find(log => {
+        try {
+          const decoded = decodeEventLog({
+            abi: RepairRequestContractABI,
+            data: log.data,
+            topics: log.topics
+          })
+          return decoded.eventName === 'RepairRequestCreated'
+        } catch {
+          return false
+        }
       })
 
-      // In a real implementation, you would get the ID from the transaction receipt
-      // For now, we'll use a timestamp as a placeholder
-      const id = BigInt(Date.now())
-
-      return {
-        id,
-        hash,
+      if (!event) {
+        throw new Error('Failed to get request ID from event')
       }
+
+      const decoded = decodeEventLog({
+        abi: RepairRequestContractABI,
+        data: event.data,
+        topics: event.topics
+      })
+
+      const id = decoded.args.id as bigint
+
+      if (!id) {
+        throw new Error('Failed to get request ID from event')
+      }
+
+      return { id, hash: result.hash }
     } catch (error) {
       console.error('Error creating repair request:', error)
       throw error
@@ -192,7 +238,7 @@ export function useWatchRepairRequestEvents(callbacks: {
     eventName: 'RepairRequestCreated',
     onLogs: (logs) => {
       if (callbacks.onCreated) {
-        for (const log of logs) {
+        for (const log of logs as ContractEventLog[]) {
           const { args } = log
           if (args && 
               args.id !== undefined && 
@@ -221,7 +267,7 @@ export function useWatchRepairRequestEvents(callbacks: {
     eventName: 'RepairRequestStatusChanged',
     onLogs: (logs) => {
       if (callbacks.onStatusChanged) {
-        for (const log of logs) {
+        for (const log of logs as ContractEventLog[]) {
           const { args } = log
           if (args && 
               args.id !== undefined && 
@@ -250,7 +296,7 @@ export function useWatchRepairRequestEvents(callbacks: {
     eventName: 'DescriptionUpdated',
     onLogs: (logs) => {
       if (callbacks.onDescriptionUpdated) {
-        for (const log of logs) {
+        for (const log of logs as ContractEventLog[]) {
           const { args } = log
           if (args && 
               args.id !== undefined && 
@@ -279,7 +325,7 @@ export function useWatchRepairRequestEvents(callbacks: {
     eventName: 'WorkDetailsUpdated',
     onLogs: (logs) => {
       if (callbacks.onWorkDetailsUpdated) {
-        for (const log of logs) {
+        for (const log of logs as ContractEventLog[]) {
           const { args } = log
           if (args && 
               args.id !== undefined && 

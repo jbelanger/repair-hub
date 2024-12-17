@@ -1,19 +1,22 @@
-import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useNavigate } from "@remix-run/react";
+import { json, redirect, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
+import { useLoaderData, useNavigate, Form } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { useRepairRequest, useRepairRequestRead, useWatchRepairRequestEvents } from "~/utils/blockchain/hooks/useRepairRequest";
 import { RepairRequestStatusType, CONTRACT_ADDRESSES } from "~/utils/blockchain/config";
 import { Card } from "~/components/ui/Card";
 import { RepairStatus, RepairUrgency } from "~/components/ui/StatusBadge";
 import { Select } from "~/components/ui/Select";
+import { TextArea } from "~/components/ui/TextArea";
+import { Button } from "~/components/ui/Button";
 import { PageHeader } from "~/components/ui/PageHeader";
-import { FormField } from "~/components/ui/Form";
-import { Building2, User, Calendar, Clock, Hash, Link as LinkIcon, History } from 'lucide-react';
+import { FormField, FormSection } from "~/components/ui/Form";
+import { Building2, User, Calendar, Clock, Hash, Link as LinkIcon, History, Wrench, AlertTriangle } from 'lucide-react';
 import { useEffect, useState, useCallback } from "react";
 import { useToast, ToastManager } from "~/components/ui/Toast";
 import { Skeleton } from "~/components/ui/LoadingState";
 import { requireUser } from "~/utils/session.server";
 import { type Address, type HexString, getEtherscanLink } from "~/utils/blockchain/types";
+import { hashToHexSync } from "~/utils/blockchain/hash.server";
 
 type LoaderData = {
   repairRequest: {
@@ -22,6 +25,8 @@ type LoaderData = {
     urgency: string;
     status: string;
     attachments: string;
+    workDetails: string | null;
+    workDetailsHash: string | null;
     createdAt: string;
     updatedAt: string;
     property: {
@@ -48,7 +53,7 @@ type LoaderData = {
 };
 
 type BlockchainEvent = {
-  type: 'created' | 'updated' | 'hashUpdated';
+  type: 'created' | 'updated' | 'hashUpdated' | 'workDetailsUpdated';
   timestamp: bigint;
   data: {
     status?: RepairRequestStatusType;
@@ -87,6 +92,17 @@ function getAvailableStatusUpdates(
       return [];
   }
 }
+
+// Convert blockchain status enum to database status string
+const statusMap = {
+  [RepairRequestStatusType.PENDING]: "PENDING",
+  [RepairRequestStatusType.IN_PROGRESS]: "IN_PROGRESS",
+  [RepairRequestStatusType.COMPLETED]: "COMPLETED",
+  [RepairRequestStatusType.ACCEPTED]: "ACCEPTED",
+  [RepairRequestStatusType.REFUSED]: "REFUSED",
+  [RepairRequestStatusType.REJECTED]: "REJECTED",
+  [RepairRequestStatusType.CANCELLED]: "CANCELLED",
+} as const;
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -164,12 +180,150 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   });
 }
 
+export async function action({ request, params }: ActionFunctionArgs) {
+  const user = await requireUser(request);
+  const { id } = params;
+
+  if (!id) {
+    throw new Response("Not Found", { status: 404 });
+  }
+
+  const repairRequest = await db.repairRequest.findUnique({
+    where: { id },
+    include: {
+      property: {
+        include: {
+          landlord: true,
+        },
+      },
+      initiator: true,
+    },
+  });
+
+  if (!repairRequest) {
+    throw new Response("Not Found", { status: 404 });
+  }
+
+  const isLandlord = user.address.toLowerCase() === repairRequest.property.landlord.address.toLowerCase();
+  const isTenant = user.address.toLowerCase() === repairRequest.initiator.address.toLowerCase();
+
+  const formData = await request.formData();
+  const action = formData.get("_action");
+
+  if (action === "updateWorkDetails") {
+    if (!isLandlord) {
+      throw new Response("Unauthorized", { status: 403 });
+    }
+
+    const workDetails = formData.get("workDetails") as string;
+    if (!workDetails) {
+      return json({ error: "Work details are required" }, { status: 400 });
+    }
+
+    const workDetailsHash = hashToHexSync(workDetails);
+
+    await db.repairRequest.update({
+      where: { id },
+      data: {
+        workDetails,
+        workDetailsHash,
+      },
+    });
+
+    return json({ success: true });
+  }
+
+  if (action === "updateStatus") {
+    const newStatus = formData.get("status") as string;
+    if (!newStatus) {
+      return json({ error: "Status is required" }, { status: 400 });
+    }
+
+    const numericStatus = Number(newStatus);
+    if (!(numericStatus in RepairRequestStatusType)) {
+      return json({ error: "Invalid status" }, { status: 400 });
+    }
+
+    const dbStatus = statusMap[numericStatus as RepairRequestStatusType];
+    if (!dbStatus) {
+      return json({ error: "Invalid status" }, { status: 400 });
+    }
+
+    // Validate status transition based on user role
+    const availableStatusUpdates = getAvailableStatusUpdates(
+      repairRequest.status,
+      user.role,
+      isLandlord,
+      isTenant
+    );
+
+    if (!availableStatusUpdates.includes(numericStatus)) {
+      return json({ error: "Invalid status transition" }, { status: 400 });
+    }
+
+    await db.repairRequest.update({
+      where: { id },
+      data: {
+        status: dbStatus,
+      },
+    });
+
+    return json({ success: true });
+  }
+
+  if (action === "withdrawRequest") {
+    if (!isTenant) {
+      throw new Response("Unauthorized", { status: 403 });
+    }
+
+    if (repairRequest.status !== "PENDING") {
+      return json({ error: "Can only withdraw pending requests" }, { status: 400 });
+    }
+
+    await db.repairRequest.update({
+      where: { id },
+      data: {
+        status: "CANCELLED",
+      },
+    });
+
+    return json({ success: true });
+  }
+
+  if (action === "approveWork") {
+    if (!isTenant) {
+      throw new Response("Unauthorized", { status: 403 });
+    }
+
+    if (repairRequest.status !== "COMPLETED") {
+      return json({ error: "Can only approve/refuse completed work" }, { status: 400 });
+    }
+
+    const isAccepted = formData.get("isAccepted") === "true";
+    const newStatus = isAccepted ? "ACCEPTED" : "REFUSED";
+
+    await db.repairRequest.update({
+      where: { id },
+      data: {
+        status: newStatus,
+      },
+    });
+
+    return json({ success: true });
+  }
+
+  return json({ error: "Invalid action" }, { status: 400 });
+}
+
 export default function RepairRequestDetails() {
   const navigate = useNavigate();
   const { repairRequest, user, availableStatusUpdates } = useLoaderData<typeof loader>();
-  const { updateStatus, isPending } = useRepairRequest();
+  const { updateStatus, updateWorkDetails, withdrawRequest, approveWork, isPending } = useRepairRequest();
   const [events, setEvents] = useState<BlockchainEvent[]>([]);
+  const [workDetailsInput, setWorkDetailsInput] = useState(repairRequest.workDetails || "");
   const { toasts, addToast, removeToast } = useToast();
+  const isLandlord = user.address.toLowerCase() === repairRequest.property.landlord.address.toLowerCase();
+  const isTenant = user.address.toLowerCase() === repairRequest.initiator.address.toLowerCase();
 
   // Get blockchain data
   const { repairRequest: blockchainRequest, isLoading } = useRepairRequestRead(BigInt(repairRequest.id));
@@ -177,7 +331,6 @@ export default function RepairRequestDetails() {
   // Create a stable callback for event handling
   const handleEvent = useCallback((type: BlockchainEvent['type'], timestamp: bigint, data = {}) => {
     setEvents(prev => {
-      // Check if this exact event already exists
       const exists = prev.some(e => 
         e.type === type && 
         e.timestamp === timestamp &&
@@ -202,9 +355,9 @@ export default function RepairRequestDetails() {
         handleEvent('updated', updatedAt, { status: newStatus });
       }
     },
-    onDescriptionUpdated: (id: bigint, initiator: Address, landlord: Address, oldHash: HexString, newHash: HexString, updatedAt: bigint) => {
+    onWorkDetailsUpdated: (id: bigint, initiator: Address, landlord: Address, oldHash: HexString, newHash: HexString, updatedAt: bigint) => {
       if (id.toString() === repairRequest.id) {
-        handleEvent('hashUpdated', updatedAt, { oldHash, newHash });
+        handleEvent('workDetailsUpdated', updatedAt, { oldHash, newHash });
       }
     }
   });
@@ -216,12 +369,109 @@ export default function RepairRequestDetails() {
 
   const handleStatusUpdate = async (newStatus: RepairRequestStatusType) => {
     try {
+      // First update the blockchain
       await updateStatus(BigInt(repairRequest.id), newStatus);
+      
+      // Then update the database through the form action
+      const formData = new FormData();
+      formData.append("_action", "updateStatus");
+      formData.append("status", newStatus.toString());
+      
+      const response = await fetch(`/dashboard/repair-requests/${repairRequest.id}`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update status in database");
+      }
+
       addToast("Status updated successfully", "success");
       window.location.reload();
     } catch (error) {
       console.error('Error updating status:', error);
       addToast("Failed to update status", "error");
+    }
+  };
+
+  const handleWorkDetailsUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    try {
+      const formData = new FormData(e.currentTarget);
+      const workDetails = formData.get("workDetails") as string;
+      
+      // First update the blockchain
+      const workDetailsHash = hashToHexSync(workDetails);
+      await updateWorkDetails(BigInt(repairRequest.id), workDetailsHash);
+      
+      // Then submit the form to update the database
+      const response = await fetch(`/dashboard/repair-requests/${repairRequest.id}`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update work details in database");
+      }
+
+      addToast("Work details updated successfully", "success");
+      window.location.reload();
+    } catch (error) {
+      console.error('Error updating work details:', error);
+      addToast("Failed to update work details", "error");
+    }
+  };
+
+  const handleWithdrawRequest = async () => {
+    try {
+      // First update the blockchain
+      await withdrawRequest(BigInt(repairRequest.id));
+      
+      // Then update the database
+      const formData = new FormData();
+      formData.append("_action", "withdrawRequest");
+      
+      const response = await fetch(`/dashboard/repair-requests/${repairRequest.id}`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to withdraw request in database");
+      }
+
+      addToast("Request withdrawn successfully", "success");
+      window.location.reload();
+    } catch (error) {
+      console.error('Error withdrawing request:', error);
+      addToast("Failed to withdraw request", "error");
+    }
+  };
+
+  const handleApproveWork = async (isAccepted: boolean) => {
+    try {
+      // First update the blockchain
+      await approveWork(BigInt(repairRequest.id), isAccepted);
+      
+      // Then update the database
+      const formData = new FormData();
+      formData.append("_action", "approveWork");
+      formData.append("isAccepted", isAccepted.toString());
+      
+      const response = await fetch(`/dashboard/repair-requests/${repairRequest.id}`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update work approval in database");
+      }
+
+      addToast(`Work ${isAccepted ? 'approved' : 'refused'} successfully`, "success");
+      window.location.reload();
+    } catch (error) {
+      console.error('Error approving/refusing work:', error);
+      addToast(`Failed to ${isAccepted ? 'approve' : 'refuse'} work`, "error");
     }
   };
 
@@ -253,23 +503,89 @@ export default function RepairRequestDetails() {
               {availableStatusUpdates.length > 0 && (
                 <div className="mt-6 pt-6 border-t border-purple-600/10">
                   <FormField label="Update Status">
-                    <Select
-                      value=""
-                      onChange={(e) => handleStatusUpdate(Number(e.target.value))}
-                      disabled={isPending}
-                    >
-                      <option value="">Select new status...</option>
-                      {availableStatusUpdates.map((status) => (
-                        <option key={status} value={status}>
-                          {RepairRequestStatusType[status].replace(/_/g, ' ')}
-                        </option>
-                      ))}
-                    </Select>
+                    <div className="flex gap-4">
+                      <Select
+                        value=""
+                        onChange={(e) => handleStatusUpdate(Number(e.target.value))}
+                        disabled={isPending}
+                      >
+                        <option value="">Select new status...</option>
+                        {availableStatusUpdates.map((status) => (
+                          <option key={status} value={status}>
+                            {RepairRequestStatusType[status].replace(/_/g, ' ')}
+                          </option>
+                        ))}
+                      </Select>
+                      {repairRequest.status === 'PENDING' && isTenant && (
+                        <Button
+                          variant="danger"
+                          onClick={handleWithdrawRequest}
+                          disabled={isPending}
+                          leftIcon={<AlertTriangle className="h-5 w-5" />}
+                        >
+                          Withdraw Request
+                        </Button>
+                      )}
+                      {repairRequest.status === 'COMPLETED' && isTenant && (
+                        <div className="flex gap-2">
+                          <Button
+                            variant="primary"
+                            onClick={() => handleApproveWork(true)}
+                            disabled={isPending}
+                          >
+                            Approve Work
+                          </Button>
+                          <Button
+                            variant="danger"
+                            onClick={() => handleApproveWork(false)}
+                            disabled={isPending}
+                          >
+                            Refuse Work
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </FormField>
                 </div>
               )}
             </div>
           </Card>
+
+          {/* Work Details Card */}
+          {isLandlord && (
+            <Card
+              accent="purple"
+              header={{
+                title: "Work Details",
+                icon: <Wrench className="h-5 w-5" />,
+                iconBackground: true
+              }}
+            >
+              <div className="p-6">
+                <Form method="post" onSubmit={handleWorkDetailsUpdate}>
+                  <input type="hidden" name="_action" value="updateWorkDetails" />
+                  <FormSection>
+                    <FormField label="Work Details">
+                      <TextArea
+                        name="workDetails"
+                        value={workDetailsInput}
+                        onChange={(e) => setWorkDetailsInput(e.target.value)}
+                        placeholder="Enter work details..."
+                        disabled={isPending}
+                      />
+                    </FormField>
+                    <Button
+                      type="submit"
+                      disabled={isPending || !workDetailsInput}
+                      leftIcon={<Wrench className="h-5 w-5" />}
+                    >
+                      Update Work Details
+                    </Button>
+                  </FormSection>
+                </Form>
+              </div>
+            </Card>
+          )}
 
           {/* Blockchain Information Card */}
           <Card
@@ -293,6 +609,16 @@ export default function RepairRequestDetails() {
                         <p className="text-white text-sm font-mono">{blockchainRequest.descriptionHash}</p>
                       </div>
                     </div>
+
+                    {blockchainRequest.workDetailsHash && (
+                      <div className="flex items-start gap-3">
+                        <Wrench className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <p className="text-white/70">Work Details Hash</p>
+                          <p className="text-white text-sm font-mono">{blockchainRequest.workDetailsHash}</p>
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="flex items-start gap-3">
                       <User className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
@@ -357,7 +683,7 @@ export default function RepairRequestDetails() {
                               {formatTimestamp(event.timestamp)} -{' '}
                               {event.type === 'created' && 'Request created on chain'}
                               {event.type === 'updated' && `Status updated to ${RepairRequestStatusType[event.data.status!]}`}
-                              {event.type === 'hashUpdated' && 'Description hash updated'}
+                              {event.type === 'workDetailsUpdated' && 'Work details updated'}
                             </div>
                           ))
                       ) : (
