@@ -25,8 +25,7 @@ import { readRepairRequest } from '~/utils/blockchain/utils/contract-read'
 import { decodeEventLog } from 'viem'
 import { CONTRACT_ADDRESSES } from "~/utils/blockchain/config";
 import { useRepairRequestEvents } from "~/hooks/useRepairRequestEvents";
-import { createPublicClient, http } from 'viem'
-import { sepolia } from 'viem/chains'
+import { getPublicClient } from "~/utils/blockchain/utils/client";
 
 // Helper function to convert BigInt values to strings
 function serializeBlockchainData(data: ContractRepairRequest): SerializedContractRepairRequest {
@@ -43,7 +42,6 @@ function toBigInt(value: string | number): bigint {
   return BigInt(value.toString());
 }
 
-
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
   const { id } = params;
@@ -52,14 +50,8 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  // Create a public client for server-side blockchain reads
-  const publicClient = createPublicClient({
-    chain: sepolia,
-    transport: http()
-  });
-
   // Get blockchain state first
-  const blockchainResult = await readRepairRequest(publicClient, BigInt(id));
+  const blockchainResult = await readRepairRequest(getPublicClient(), BigInt(id));
   if (blockchainResult.isErr()) {
     throw new Response("Failed to read blockchain state", { status: 500 });
   }
@@ -141,14 +133,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return json({ error: "Repair request ID is required" }, { status: 400 });
     }
 
-    // Create a public client for server-side blockchain reads
-    const publicClient = createPublicClient({
-      chain: sepolia,
-      transport: http()
-    });
-
     // Get blockchain state first
-    const blockchainResult = await readRepairRequest(publicClient, BigInt(id));
+    const blockchainResult = await readRepairRequest(getPublicClient(), BigInt(id));
     if (blockchainResult.isErr()) {
       throw new Response("Failed to read blockchain state", { status: 500 });
     }
@@ -598,15 +584,6 @@ return (
         subtitle="View and manage repair request information"
         backTo="/dashboard/repair-requests"
       />
-      {isLandlord && isTenant && (
-        <Switch
-          checked={showLandlordView}
-          onChange={setShowLandlordView}
-          leftLabel="Tenant View"
-          rightLabel="Landlord View"
-          className="ml-4"
-        />
-      )}
     </div>
 
     <div className="grid gap-6 lg:grid-cols-3">
@@ -657,3 +634,4 @@ return (
   </div>
 );
 }
+

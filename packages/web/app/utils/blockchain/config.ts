@@ -1,5 +1,5 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit'
-import { sepolia } from 'wagmi/chains'
+import { sepolia, hardhat } from 'wagmi/chains'
 
 // Ensure environment variables are available
 const WALLETCONNECT_PROJECT_ID = typeof document !== 'undefined' 
@@ -44,6 +44,6 @@ export interface RepairRequest {
 export const config = getDefaultConfig({
   appName: 'Repair Hub',
   projectId: WALLETCONNECT_PROJECT_ID as string,
-  chains: [sepolia],
+  chains: [hardhat, sepolia], // Added hardhat chain and made it the default
   ssr: true, // Enable SSR mode
 })

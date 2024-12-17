@@ -15,7 +15,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "~/context/ThemeContext";
-import { Logo } from "~/components/Logo";
 
 interface SidebarProps {
   user: {
@@ -114,31 +113,9 @@ export function Sidebar({ user, counts }: SidebarProps) {
         boxShadow: 'var(--shadow-lg)'
       }}
     >
-      {/* Logo and App Name */}
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3">
-          <Logo logoSrc="/logo5.svg" size={collapsed ? "md" : "lg"} showText={false} className="py-1" />
-          {!collapsed && (
-            <span className="text-xl font-bold tracking-tight text-[var(--color-neutral-white)]">
-              RepairHub
-            </span>
-          )}
-        </div>
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className="p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)]"
-          style={{ color: 'var(--color-text-secondary)' }}
-        >
-          {collapsed ? (
-            <ChevronRight className="h-5 w-5" />
-          ) : (
-            <ChevronLeft className="h-5 w-5" />
-          )}
-        </button>
-      </div>
-
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2">
+        {/* Navigation Items */}
         {navigation.map((item) => (
           <Link
             key={item.name}
@@ -176,8 +153,27 @@ export function Sidebar({ user, counts }: SidebarProps) {
       {/* Footer */}
       <div
         className="p-4 space-y-2"
-        style={{ borderTop: '1px solid var(--card-border)' }}
+        style={{ 
+          borderTop: '1px solid var(--card-border)',
+          position: 'relative'
+        }}
       >
+        {/* Collapse Button */}
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className={cn(
+            "absolute -top-4 -right-3 p-1.5 rounded-full transition-colors duration-200",
+            "bg-[var(--card-bg)] border border-[var(--card-border)]",
+            "hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)]"
+          )}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <ChevronLeft className="h-4 w-4" />
+          )}
+        </button>
+
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className={cn(

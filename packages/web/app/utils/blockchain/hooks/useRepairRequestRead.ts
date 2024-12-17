@@ -2,7 +2,6 @@ import { useReadContract } from 'wagmi'
 import { type Address } from '../types'
 import { RepairRequestContractABI } from '../abis/RepairRequestContract'
 import { CONTRACT_ADDRESSES } from '../config'
-import { sepolia } from 'viem/chains'
 import { ResultAsync } from 'neverthrow'
 import { ContractError, ContractRepairRequest } from '../types/repair-request'
 
@@ -12,7 +11,6 @@ export function useRepairRequestRead(requestId?: bigint) {
     abi: RepairRequestContractABI,
     functionName: 'getRepairRequest',
     args: requestId ? [requestId] : undefined,
-    chainId: sepolia.id,
     query: {
       enabled: !!requestId,
       retry: true, // Enable retries

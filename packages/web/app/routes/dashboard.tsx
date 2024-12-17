@@ -158,32 +158,30 @@ export default function AppLayout() {
           borderBottom: '1px solid var(--card-border)'
         }}>
           {/* Left: Logo and Navigation */}
-          <div className={isTenant ? "flex items-center gap-6" : "w-[var(--sidebar-width)]"}>
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
+              <Logo logoSrc="/logo5.svg" size="lg" showText={false} className="py-1" />
+              <span className="text-xl font-bold tracking-tight text-[var(--color-neutral-white)]">
+                RepairHub
+              </span>
+            </div>
             {isTenant && (
-              <>
-                <div className="flex items-center gap-3">
-                  <Logo logoSrc="/logo5.svg" size="lg" showText={false} className="py-1" />
-                  <span className="text-xl font-bold tracking-tight text-[var(--color-neutral-white)]">
-                    RepairHub
+              <Link
+                to="/dashboard/repair-requests"
+                className={cn(
+                  "flex items-center gap-2 text-sm font-medium",
+                  location.pathname.startsWith('/dashboard/repair-requests')
+                    ? "text-[var(--color-text-primary)]"
+                    : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                )}
+              >
+                Repair Requests
+                {counts.repairs > 0 && (
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-[var(--color-accent-secondary)] text-[var(--color-accent-primary)]">
+                    {counts.repairs}
                   </span>
-                </div>
-                <Link
-                  to="/dashboard/repair-requests"
-                  className={cn(
-                    "flex items-center gap-2 text-sm font-medium",
-                    location.pathname.startsWith('/dashboard/repair-requests')
-                      ? "text-[var(--color-text-primary)]"
-                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-                  )}
-                >
-                  Repair Requests
-                  {counts.repairs > 0 && (
-                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-[var(--color-accent-secondary)] text-[var(--color-accent-primary)]">
-                      {counts.repairs}
-                    </span>
-                  )}
-                </Link>
-              </>
+                )}
+              </Link>
             )}
           </div>
 

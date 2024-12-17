@@ -13,9 +13,9 @@ import { LinkButton } from "~/components/ui/Button";
 import { requireUser } from "~/utils/session.server";
 import { useRepairRequestRead } from "~/utils/blockchain/hooks/useRepairRequest";
 import { Badge } from "~/components/ui/Badge";
-import { getEtherscanLink } from "~/utils/blockchain/types";
 import { CONTRACT_ADDRESSES, RepairRequestStatusType } from "~/utils/blockchain/config";
 import { statusMap } from "~/utils/repair-request";
+import { useChainId } from 'wagmi';
 
 type LoaderData = {
   repairRequests: Array<{
@@ -93,6 +93,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 function BlockchainStatus({ requestId }: { requestId: string }) {
   const { data, isLoading, isError } = useRepairRequestRead(BigInt(requestId));
+  const chainId = useChainId();
 
   if (isLoading) {
     return (
@@ -112,7 +113,8 @@ function BlockchainStatus({ requestId }: { requestId: string }) {
     );
   }
 
-  const etherscanUrl = `https://sepolia.etherscan.io/address/${CONTRACT_ADDRESSES.REPAIR_REQUEST}`;
+  // For Hardhat, we don't show an explorer link
+  const isHardhat = chainId === 31337;
   const status = statusMap[data.status as RepairRequestStatusType];
 
   return (
@@ -120,10 +122,15 @@ function BlockchainStatus({ requestId }: { requestId: string }) {
       <RepairStatus status={status} />
       <Badge 
         variant="success" 
-        className="text-green-400 cursor-pointer"
+        className={`text-green-400 ${!isHardhat ? 'cursor-pointer' : ''}`}
         onClick={(e) => {
-          e.preventDefault(); // Prevent the parent Link from navigating
-          window.open(etherscanUrl, '_blank', 'noopener,noreferrer');
+          if (!isHardhat) {
+            e.preventDefault(); // Prevent the parent Link from navigating
+            const etherscanUrl = chainId === 11155111 
+              ? `https://sepolia.etherscan.io/address/${CONTRACT_ADDRESSES.REPAIR_REQUEST}`
+              : `https://etherscan.io/address/${CONTRACT_ADDRESSES.REPAIR_REQUEST}`;
+            window.open(etherscanUrl, '_blank', 'noopener,noreferrer');
+          }
         }}
       >
         <LinkIcon className="h-4 w-4 mr-1" />
