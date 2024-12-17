@@ -15,6 +15,27 @@ export const formatTimestamp = (timestamp: bigint) => {
   return new Date(Number(timestamp) * 1000).toLocaleString();
 };
 
+// Get valid transitions for a given status according to the contract rules
+export function getValidTransitions(status: RepairRequestStatusType): RepairRequestStatusType[] {
+  switch (status) {
+    case RepairRequestStatusType.PENDING:
+      return [
+        RepairRequestStatusType.IN_PROGRESS,
+        RepairRequestStatusType.REJECTED,
+        RepairRequestStatusType.CANCELLED
+      ];
+    case RepairRequestStatusType.IN_PROGRESS:
+      return [RepairRequestStatusType.COMPLETED];
+    case RepairRequestStatusType.COMPLETED:
+      return [
+        RepairRequestStatusType.ACCEPTED,
+        RepairRequestStatusType.REFUSED
+      ];
+    default:
+      return [];
+  }
+}
+
 // Get available status updates based on user role and current status
 export function getAvailableStatusUpdates(
   currentStatus: string,
@@ -24,59 +45,105 @@ export function getAvailableStatusUpdates(
 ): RepairRequestStatusType[] {
   if (!isLandlord && !isTenant) return [];
 
-  switch (currentStatus) {
-    case 'PENDING':
-      return isLandlord 
-        ? [RepairRequestStatusType.IN_PROGRESS, RepairRequestStatusType.REJECTED]
-        : [RepairRequestStatusType.CANCELLED];
-    case 'IN_PROGRESS':
-      return isLandlord 
-        ? [RepairRequestStatusType.COMPLETED]
-        : [];
-    case 'COMPLETED':
-      return isTenant
-        ? [RepairRequestStatusType.ACCEPTED, RepairRequestStatusType.REFUSED]
-        : [];
-    default:
-      return [];
+  // Convert database status string to enum
+  const currentEnum = reverseStatusMap[currentStatus as keyof typeof reverseStatusMap];
+  if (currentEnum === undefined) return [];
+
+  // Get valid transitions for the current status
+  const validTransitions = getValidTransitions(currentEnum);
+  
+  // Filter transitions based on user role
+  if (isLandlord) {
+    return validTransitions.filter(status => 
+      status === RepairRequestStatusType.IN_PROGRESS ||
+      status === RepairRequestStatusType.COMPLETED ||
+      status === RepairRequestStatusType.REJECTED
+    );
   }
+  
+  if (isTenant) {
+    return validTransitions.filter(status => 
+      status === RepairRequestStatusType.CANCELLED ||
+      status === RepairRequestStatusType.ACCEPTED ||
+      status === RepairRequestStatusType.REFUSED
+    );
+  }
+
+  return [];
 }
 
 // Validate status transitions according to smart contract rules
 export function validateStatusTransition(currentStatus: string, newStatus: string): string | null {
   // Convert database status strings to blockchain enum values
-  const currentEnum = Object.entries(statusMap).find(([_, value]) => value === currentStatus)?.[0];
-  const newEnum = Object.entries(statusMap).find(([_, value]) => value === newStatus)?.[0];
+  const currentEnum = reverseStatusMap[currentStatus as keyof typeof reverseStatusMap];
+  const newEnum = reverseStatusMap[newStatus as keyof typeof reverseStatusMap];
 
-  if (!currentEnum || !newEnum) {
+  if (currentEnum === undefined || newEnum === undefined) {
     return "Invalid status value";
   }
 
-  const current = parseInt(currentEnum);
-  const next = parseInt(newEnum);
+  // Check if the status is final (cannot be changed)
+  if (currentEnum === RepairRequestStatusType.ACCEPTED ||
+      currentEnum === RepairRequestStatusType.REFUSED ||
+      currentEnum === RepairRequestStatusType.REJECTED ||
+      currentEnum === RepairRequestStatusType.CANCELLED) {
+    return `Cannot update status: ${currentStatus} is a final status`;
+  }
 
-  // Define valid transitions using enum values
-  const validTransitions: { [key in RepairRequestStatusType]: RepairRequestStatusType[] } = {
-    [RepairRequestStatusType.PENDING]: [
-      RepairRequestStatusType.IN_PROGRESS,
-      RepairRequestStatusType.REJECTED,
-      RepairRequestStatusType.CANCELLED
-    ],
-    [RepairRequestStatusType.IN_PROGRESS]: [
-      RepairRequestStatusType.COMPLETED
-    ],
-    [RepairRequestStatusType.COMPLETED]: [
-      RepairRequestStatusType.ACCEPTED,
-      RepairRequestStatusType.REFUSED
-    ],
-    [RepairRequestStatusType.ACCEPTED]: [],
-    [RepairRequestStatusType.REFUSED]: [],
-    [RepairRequestStatusType.REJECTED]: [],
-    [RepairRequestStatusType.CANCELLED]: []
-  };
+  // Get valid transitions for the current status
+  const validTransitions = getValidTransitions(currentEnum);
 
-  if (!validTransitions[current as RepairRequestStatusType]?.includes(next as RepairRequestStatusType)) {
+  // Check if the new status is a valid transition
+  if (!validTransitions.includes(newEnum)) {
     return `Invalid transition from ${currentStatus} to ${newStatus}`;
+  }
+
+  return null;
+}
+
+// Validate withdraw request conditions according to contract rules
+export function validateWithdrawRequest(status: string): string | null {
+  // Convert database status string to enum
+  const currentEnum = reverseStatusMap[status as keyof typeof reverseStatusMap];
+  if (currentEnum === undefined) {
+    return "Invalid status value";
+  }
+
+  // Check if the status is final (cannot be changed)
+  if (currentEnum === RepairRequestStatusType.ACCEPTED ||
+      currentEnum === RepairRequestStatusType.REFUSED ||
+      currentEnum === RepairRequestStatusType.REJECTED ||
+      currentEnum === RepairRequestStatusType.CANCELLED) {
+    return `Cannot withdraw request: ${status} is a final status`;
+  }
+
+  // Check if request is in PENDING status
+  if (currentEnum !== RepairRequestStatusType.PENDING) {
+    return "Can only withdraw pending requests";
+  }
+
+  return null;
+}
+
+// Validate approve work conditions according to contract rules
+export function validateApproveWork(status: string): string | null {
+  // Convert database status string to enum
+  const currentEnum = reverseStatusMap[status as keyof typeof reverseStatusMap];
+  if (currentEnum === undefined) {
+    return "Invalid status value";
+  }
+
+  // Check if the status is final (cannot be changed)
+  if (currentEnum === RepairRequestStatusType.ACCEPTED ||
+      currentEnum === RepairRequestStatusType.REFUSED ||
+      currentEnum === RepairRequestStatusType.REJECTED ||
+      currentEnum === RepairRequestStatusType.CANCELLED) {
+    return `Cannot approve/refuse work: ${status} is a final status`;
+  }
+
+  // Check if request is in COMPLETED status
+  if (currentEnum !== RepairRequestStatusType.COMPLETED) {
+    return "Can only approve/refuse completed work";
   }
 
   return null;

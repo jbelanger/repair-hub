@@ -1,7 +1,8 @@
 import { 
   useReadContract,
   useWriteContract,
-  useWatchContractEvent
+  useWatchContractEvent,
+  usePublicClient
 } from 'wagmi'
 import { type Address, type HexString } from '../types'
 import { RepairRequestContractABI } from '../abis/RepairRequestContract'
@@ -13,9 +14,16 @@ interface BlockchainRepairRequestResult {
   hash: HexString;
 }
 
-interface ContractWriteResult {
-  hash: HexString;
-  wait: () => Promise<TransactionReceipt>;
+interface ContractRepairRequest {
+  id: bigint;
+  initiator: Address;
+  landlord: Address;
+  propertyId: string;
+  descriptionHash: string;
+  workDetailsHash: string;
+  status: number;
+  createdAt: bigint;
+  updatedAt: bigint;
 }
 
 type DecodedEventArgs = {
@@ -40,8 +48,72 @@ type DecodedEventArgs = {
     }
 );
 
+// Helper function to parse contract errors
+function parseContractError(error: any): string {
+  console.log('Original error:', error);
+  
+  // If it's a wagmi error, it might have additional details
+  if (error.cause) {
+    console.log('Error cause:', error.cause);
+  }
+
+  const errorMessage = error.message || error.toString();
+  console.log('Error message:', errorMessage);
+  
+  // Check for specific contract errors
+  if (errorMessage.includes('RepairRequestDoesNotExist')) {
+    return 'This repair request does not exist';
+  }
+  if (errorMessage.includes('CallerIsNotLandlord')) {
+    return 'Only the landlord can perform this action';
+  }
+  if (errorMessage.includes('CallerIsNotTenant')) {
+    return 'Only the tenant can perform this action';
+  }
+  if (errorMessage.includes('RequestIsCancelled')) {
+    return 'This request has been cancelled and cannot be modified';
+  }
+  if (errorMessage.includes('RequestIsNotPending')) {
+    return 'This action can only be performed on pending requests';
+  }
+  if (errorMessage.includes('InvalidStatusTransition')) {
+    return 'Invalid status transition. Please check the current status and try again.';
+  }
+  if (errorMessage.includes('RequestNotCompleted')) {
+    return 'This action can only be performed on completed requests';
+  }
+  if (errorMessage.includes('Pausable: paused')) {
+    return 'The contract is currently paused. Please try again later.';
+  }
+
+  // Check for common web3 errors
+  if (errorMessage.includes('user rejected transaction')) {
+    return 'Transaction was cancelled';
+  }
+  if (errorMessage.includes('insufficient funds')) {
+    return 'Insufficient funds to complete the transaction';
+  }
+  if (errorMessage.includes('gas required exceeds allowance')) {
+    return 'Transaction would exceed gas limits. Please try again.';
+  }
+  if (errorMessage.includes('cannot estimate gas') || errorMessage.includes('execution reverted')) {
+    return 'Unable to estimate gas. The transaction may fail or the contract could be paused.';
+  }
+
+  // Return the original error message if we can't parse it
+  return errorMessage;
+}
+
 export function useRepairRequest() {
   const { writeContractAsync, isPending, isSuccess, error } = useWriteContract()
+  const publicClient = usePublicClient()
+
+  const waitForTransaction = async (hash: HexString) => {
+    if (!publicClient) {
+      throw new Error('Public client not available');
+    }
+    return await publicClient.waitForTransactionReceipt({ hash });
+  };
 
   const createRepairRequest = async (
     propertyId: HexString,
@@ -49,15 +121,28 @@ export function useRepairRequest() {
     landlord: Address
   ): Promise<BlockchainRepairRequestResult> => {
     try {
-      const result = await writeContractAsync({
+      if (!publicClient) {
+        throw new Error('Public client not available');
+      }
+
+      console.log('Creating repair request:', {
+        propertyId,
+        descriptionHash,
+        landlord,
+        contractAddress: CONTRACT_ADDRESSES.REPAIR_REQUEST,
+      });
+
+      const hash = await writeContractAsync({
         address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
         abi: RepairRequestContractABI,
         functionName: 'createRepairRequest',
         args: [propertyId, descriptionHash, landlord],
-      }) as unknown as ContractWriteResult
+      })
 
-      // Wait for transaction to be mined to get logs
-      const receipt = await result.wait()
+      console.log('Transaction submitted:', hash);
+
+      // Wait for transaction to be mined
+      const receipt = await waitForTransaction(hash);
       const event = receipt.logs.find(log => {
         try {
           const decoded = decodeEventLog({
@@ -86,10 +171,10 @@ export function useRepairRequest() {
         throw new Error('Invalid event args')
       }
 
-      return { id: args.id, hash: result.hash }
+      return { id: args.id, hash }
     } catch (error) {
-      console.error('Error creating repair request:', error)
-      throw error
+      console.error('Error in createRepairRequest:', error);
+      throw new Error(parseContractError(error))
     }
   }
 
@@ -97,54 +182,175 @@ export function useRepairRequest() {
     requestId: bigint,
     status: RepairRequestStatusType
   ) => {
-    return writeContractAsync({
-      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
-      abi: RepairRequestContractABI,
-      functionName: 'updateRepairRequestStatus',
-      args: [requestId, BigInt(status)],
-    })
+    try {
+      if (!publicClient) {
+        throw new Error('Public client not available');
+      }
+
+      console.log('Updating status:', {
+        requestId: requestId.toString(),
+        status,
+        statusEnum: RepairRequestStatusType[status],
+        contractAddress: CONTRACT_ADDRESSES.REPAIR_REQUEST,
+      });
+
+      // First check if the request exists and get its current status
+      const data = await publicClient.readContract({
+        address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
+        abi: RepairRequestContractABI,
+        functionName: 'getRepairRequest',
+        args: [requestId],
+      });
+
+      // The contract returns a tuple that matches our ContractRepairRequest interface
+      const currentRequest = data as unknown as ContractRepairRequest;
+      console.log('Current request state:', {
+        ...currentRequest,
+        status: RepairRequestStatusType[currentRequest.status],
+      });
+
+      // Validate the status transition based on the contract's rules
+      const currentStatus = currentRequest.status as RepairRequestStatusType;
+      const validTransition = (
+        (currentStatus === RepairRequestStatusType.PENDING && 
+         (status === RepairRequestStatusType.IN_PROGRESS || status === RepairRequestStatusType.REJECTED)) ||
+        (currentStatus === RepairRequestStatusType.IN_PROGRESS && 
+         status === RepairRequestStatusType.COMPLETED) ||
+        (currentStatus === RepairRequestStatusType.COMPLETED && 
+         (status === RepairRequestStatusType.ACCEPTED || status === RepairRequestStatusType.REFUSED))
+      );
+
+      if (!validTransition) {
+        throw new Error(`Invalid status transition from ${RepairRequestStatusType[currentStatus]} to ${RepairRequestStatusType[status]}`);
+      }
+
+      // If validation passes, proceed with the transaction
+      console.log('Sending transaction with args:', {
+        requestId: requestId.toString(),
+        status: status.toString(),
+      });
+
+      const hash = await writeContractAsync({
+        address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
+        abi: RepairRequestContractABI,
+        functionName: 'updateRepairRequestStatus',
+        args: [requestId, BigInt(status)],
+      });
+
+      console.log('Transaction submitted:', hash);
+      
+      // Wait for transaction to be mined
+      const receipt = await waitForTransaction(hash);
+      return receipt;
+    } catch (error) {
+      console.error('Error in updateStatus:', error);
+      throw new Error(parseContractError(error));
+    }
   }
 
   const updateDescription = async (
     requestId: bigint,
     descriptionHash: HexString
   ) => {
-    return writeContractAsync({
-      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
-      abi: RepairRequestContractABI,
-      functionName: 'updateDescription',
-      args: [requestId, descriptionHash],
-    })
+    try {
+      console.log('Updating description:', {
+        requestId: requestId.toString(),
+        descriptionHash,
+      });
+
+      const hash = await writeContractAsync({
+        address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
+        abi: RepairRequestContractABI,
+        functionName: 'updateDescription',
+        args: [requestId, descriptionHash],
+      });
+
+      console.log('Transaction submitted:', hash);
+      
+      // Wait for transaction to be mined
+      const receipt = await waitForTransaction(hash);
+      return receipt;
+    } catch (error) {
+      console.error('Error in updateDescription:', error);
+      throw new Error(parseContractError(error));
+    }
   }
 
   const updateWorkDetails = async (
     requestId: bigint,
     workDetailsHash: HexString
   ) => {
-    return writeContractAsync({
-      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
-      abi: RepairRequestContractABI,
-      functionName: 'updateWorkDetails',
-      args: [requestId, workDetailsHash],
-    })
+    try {
+      console.log('Updating work details:', {
+        requestId: requestId.toString(),
+        workDetailsHash,
+      });
+
+      const hash = await writeContractAsync({
+        address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
+        abi: RepairRequestContractABI,
+        functionName: 'updateWorkDetails',
+        args: [requestId, workDetailsHash],
+      });
+
+      console.log('Transaction submitted:', hash);
+      
+      // Wait for transaction to be mined
+      const receipt = await waitForTransaction(hash);
+      return receipt;
+    } catch (error) {
+      console.error('Error in updateWorkDetails:', error);
+      throw new Error(parseContractError(error));
+    }
   }
 
   const withdrawRequest = async (requestId: bigint) => {
-    return writeContractAsync({
-      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
-      abi: RepairRequestContractABI,
-      functionName: 'withdrawRepairRequest',
-      args: [requestId],
-    })
+    try {
+      console.log('Withdrawing request:', {
+        requestId: requestId.toString(),
+      });
+
+      const hash = await writeContractAsync({
+        address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
+        abi: RepairRequestContractABI,
+        functionName: 'withdrawRepairRequest',
+        args: [requestId],
+      });
+
+      console.log('Transaction submitted:', hash);
+      
+      // Wait for transaction to be mined
+      const receipt = await waitForTransaction(hash);
+      return receipt;
+    } catch (error) {
+      console.error('Error in withdrawRequest:', error);
+      throw new Error(parseContractError(error));
+    }
   }
 
   const approveWork = async (requestId: bigint, isAccepted: boolean) => {
-    return writeContractAsync({
-      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
-      abi: RepairRequestContractABI,
-      functionName: 'approveWork',
-      args: [requestId, isAccepted],
-    })
+    try {
+      console.log('Approving work:', {
+        requestId: requestId.toString(),
+        isAccepted,
+      });
+
+      const hash = await writeContractAsync({
+        address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
+        abi: RepairRequestContractABI,
+        functionName: 'approveWork',
+        args: [requestId, isAccepted],
+      });
+
+      console.log('Transaction submitted:', hash);
+      
+      // Wait for transaction to be mined
+      const receipt = await waitForTransaction(hash);
+      return receipt;
+    } catch (error) {
+      console.error('Error in approveWork:', error);
+      throw new Error(parseContractError(error));
+    }
   }
 
   return {
@@ -171,17 +377,7 @@ export function useRepairRequestRead(requestId?: bigint) {
     }
   })
 
-  const result = data as unknown as {
-    id: bigint
-    initiator: Address
-    landlord: Address
-    propertyId: HexString
-    descriptionHash: HexString
-    workDetailsHash: HexString
-    status: bigint
-    createdAt: bigint
-    updatedAt: bigint
-  }
+  const result = data as unknown as ContractRepairRequest;
 
   const repairRequest: RepairRequest | undefined = result ? {
     id: result.id,
@@ -190,7 +386,7 @@ export function useRepairRequestRead(requestId?: bigint) {
     propertyId: result.propertyId,
     descriptionHash: result.descriptionHash,
     workDetailsHash: result.workDetailsHash,
-    status: Number(result.status) as RepairRequestStatusType,
+    status: result.status as RepairRequestStatusType,
     createdAt: result.createdAt,
     updatedAt: result.updatedAt,
   } : undefined
@@ -365,3 +561,4 @@ export function useWatchRepairRequestEvents(callbacks: {
     }
   })
 }
+

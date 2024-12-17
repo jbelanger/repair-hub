@@ -213,33 +213,30 @@ interface ToastManagerProps {
 }
 
 export function ToastManager({ toasts, removeToast, position = "bottom" }: ToastManagerProps) {
+  // Only show the most recent toast
+  const latestToast = toasts[toasts.length - 1];
+  
+  if (!latestToast) return null;
+
   return (
-    <>
-      {toasts.map((toast, index) => {
-        const spacing = stackSpacing[toast.size || "normal"];
-        return (
-          <div
-            key={toast.id}
-            style={{
-              position: 'fixed',
-              right: '1.5rem',
-              zIndex: 50,
-              [position]: `${index * spacing + 1.5}rem`
-            }}
-          >
-            <Toast
-              title={toast.title}
-              message={toast.message}
-              type={toast.type}
-              size={toast.size}
-              duration={toast.duration}
-              position={position}
-              onClose={() => removeToast(toast.id)}
-            />
-          </div>
-        );
-      })}
-    </>
+    <div
+      style={{
+        position: 'fixed',
+        right: '1.5rem',
+        zIndex: 50,
+        [position]: '1.5rem'
+      }}
+    >
+      <Toast
+        title={latestToast.title}
+        message={latestToast.message}
+        type={latestToast.type}
+        size={latestToast.size}
+        duration={latestToast.duration}
+        position={position}
+        onClose={() => removeToast(latestToast.id)}
+      />
+    </div>
   );
 }
 
@@ -254,7 +251,8 @@ export function useToast(defaultPosition: ToastPosition = "bottom") {
     duration?: number
   ) => {
     const id = Math.random().toString(36).substring(7);
-    setToasts((prev) => [...prev, { 
+    // Replace any existing toasts with the new one
+    setToasts([{ 
       id, 
       message, 
       type, 

@@ -80,6 +80,69 @@ export const RepairRequestContractABI = [
     stateMutability: 'view'
   },
   {
+    type: 'error',
+    name: 'RepairRequestDoesNotExist',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'CallerIsNotLandlord',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'CallerIsNotTenant',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'CallerIsNotAdmin',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'RequestIsCancelled',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'InvalidPropertyId',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'InvalidDescriptionHash',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'InvalidWorkDetailsHash',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'ZeroAddress',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'RequestIsNotPending',
+    inputs: []
+  },
+  {
+    type: 'error',
+    name: 'InvalidStatusTransition',
+    inputs: [
+      { name: 'oldStatus', type: 'uint8' },
+      { name: 'newStatus', type: 'uint8' }
+    ]
+  },
+  {
+    type: 'error',
+    name: 'RequestNotCompleted',
+    inputs: []
+  },
+  {
     type: 'event',
     name: 'RepairRequestCreated',
     inputs: [

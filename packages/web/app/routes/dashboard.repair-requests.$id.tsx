@@ -8,14 +8,21 @@ import { useToast, ToastManager } from "~/components/ui/Toast";
 import { requireUser } from "~/utils/session.server";
 import { type Address, type HexString } from "~/utils/blockchain/types";
 import { hashToHexSync } from "~/utils/blockchain/hash.server";
-import { statusMap, validateStatusTransition, getAvailableStatusUpdates } from "~/utils/repair-request";
+import { 
+  statusMap, 
+  validateStatusTransition, 
+  getAvailableStatusUpdates, 
+  getValidTransitions,
+  validateWithdrawRequest,
+  validateApproveWork
+} from "~/utils/repair-request";
 import { RepairRequestBlockchain } from "~/components/repair-request/RepairRequestBlockchain";
 import { RepairRequestDetails } from "~/components/repair-request/RepairRequestDetails";
 import { LandlordView } from "~/components/repair-request/LandlordView";
 import { TenantView } from "~/components/repair-request/TenantView";
 import { useRepairRequestEvents } from "~/hooks/useRepairRequestEvents";
 import type { LoaderData, BlockchainRepairRequest } from "~/types/repair-request";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Form } from "@remix-run/react";
 import { Button } from "~/components/ui/Button";
 
@@ -181,7 +188,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
 
     // Note: Database update will happen after blockchain confirmation in the frontend
-    return json({ success: true });
+    return json({ 
+      success: true,
+      status: numericStatus // Pass the numeric status back to the client
+    });
   }
 
   if (action === "withdrawRequest") {
@@ -217,144 +227,22 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
 export default function RepairRequestPage() {
   const { repairRequest, user, availableStatusUpdates } = useLoaderData<typeof loader>();
-  const actionData = useActionData<{ success?: boolean; error?: string; workDetailsHash?: HexString }>();
+  const actionData = useActionData<{ 
+    success?: boolean; 
+    error?: string; 
+    workDetailsHash?: HexString;
+    status?: number;
+  }>();
   const navigation = useNavigation();
   const { updateStatus, updateWorkDetails, withdrawRequest, approveWork, isPending } = useRepairRequest();
   const { toasts, addToast, removeToast } = useToast();
-  const [hasShownToast, setHasShownToast] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const isSubmitting = navigation.state === "submitting";
   const showLandlordView = user.role === 'LANDLORD';
 
   // Get blockchain data and events
   const { repairRequest: blockchainRequest, isLoading, isError } = useRepairRequestRead(BigInt(repairRequest.id));
   const { events } = useRepairRequestEvents(repairRequest.id);
-
-  // Reset toast flag when form is submitted
-  useEffect(() => {
-    if (isSubmitting) {
-      setHasShownToast(false);
-    }
-  }, [isSubmitting]);
-
-  // Show toast when action completes
-  useEffect(() => {
-    if (!hasShownToast && !isSubmitting && actionData) {
-      if (actionData.success) {
-        if (actionData.workDetailsHash) {
-          // Handle work details update
-          updateWorkDetails(BigInt(repairRequest.id), actionData.workDetailsHash)
-            .then(async () => {
-              // Only update database after blockchain confirmation
-              await fetch(`/api/repair-requests/${repairRequest.id}/work-details`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ workDetails: navigation.formData?.get("workDetails") }),
-              });
-              addToast(
-                "Work details have been successfully updated",
-                "success",
-                "Update Successful"
-              );
-            })
-            .catch((error) => {
-              console.error('Blockchain update error:', error);
-              addToast(
-                "Failed to update work details on the blockchain",
-                "error",
-                "Update Failed"
-              );
-            });
-        } else {
-          // Handle other successful actions
-          const action = navigation.formData?.get("_action");
-          if (action === "updateStatus") {
-            const statusStr = navigation.formData?.get("status");
-            if (!statusStr) return;
-            
-            const status = Number(statusStr);
-            if (!(status in RepairRequestStatusType)) return;
-
-            updateStatus(BigInt(repairRequest.id), status)
-              .then(async () => {
-                // Only update database after blockchain confirmation
-                const dbStatus = statusMap[status as RepairRequestStatusType];
-                if (!dbStatus) return;
-
-                await fetch(`/api/repair-requests/${repairRequest.id}/status`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ status: dbStatus }),
-                });
-                addToast(
-                  "Status has been successfully updated",
-                  "success",
-                  "Update Successful"
-                );
-              })
-              .catch((error) => {
-                console.error('Blockchain update error:', error);
-                const errorMessage = error.message.includes("InvalidStatusTransition") 
-                  ? "Invalid status transition"
-                  : "Failed to update status on the blockchain";
-                addToast(errorMessage, "error", "Update Failed");
-              });
-          } else if (action === "withdrawRequest") {
-            withdrawRequest(BigInt(repairRequest.id))
-              .then(async () => {
-                // Only update database after blockchain confirmation
-                await fetch(`/api/repair-requests/${repairRequest.id}/status`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ status: "CANCELLED" }),
-                });
-                addToast(
-                  "Request has been successfully withdrawn",
-                  "success",
-                  "Withdrawal Successful"
-                );
-              })
-              .catch((error) => {
-                console.error('Blockchain update error:', error);
-                const errorMessage = error.message.includes("RequestIsNotPending")
-                  ? "Can only withdraw pending requests"
-                  : "Failed to withdraw request on the blockchain";
-                addToast(errorMessage, "error", "Update Failed");
-              });
-          } else if (action === "approveWork") {
-            const isAccepted = navigation.formData?.get("isAccepted") === "true";
-            approveWork(BigInt(repairRequest.id), isAccepted)
-              .then(async () => {
-                // Only update database after blockchain confirmation
-                await fetch(`/api/repair-requests/${repairRequest.id}/status`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ status: isAccepted ? "ACCEPTED" : "REFUSED" }),
-                });
-                addToast(
-                  `Work has been successfully ${isAccepted ? 'approved' : 'refused'}`,
-                  "success",
-                  isAccepted ? "Work Approved" : "Work Refused"
-                );
-              })
-              .catch((error) => {
-                console.error('Blockchain update error:', error);
-                const errorMessage = error.message.includes("RequestNotCompleted")
-                  ? "Can only approve/refuse completed work"
-                  : "Failed to update work approval on the blockchain";
-                addToast(errorMessage, "error", "Update Failed");
-              });
-          }
-        }
-      } else if (actionData.error) {
-        addToast(
-          actionData.error,
-          "error",
-          "Update Failed"
-        );
-      }
-      setHasShownToast(true);
-    }
-  }, [actionData, isSubmitting, hasShownToast, addToast, updateWorkDetails, updateStatus, withdrawRequest, approveWork, repairRequest.id, navigation.formData]);
 
   // Transform blockchain request to match component interface
   const transformedBlockchainRequest: BlockchainRepairRequest | null = blockchainRequest ? {
@@ -365,16 +253,211 @@ export default function RepairRequestPage() {
     updatedAt: blockchainRequest.updatedAt,
   } : null;
 
+  // Filter available status updates based on blockchain state, but preserve CANCELLED status for tenants
+  const filteredStatusUpdates = blockchainRequest 
+    ? availableStatusUpdates.filter(status => {
+        // Don't filter out CANCELLED status for tenants with pending requests
+        if (status === RepairRequestStatusType.CANCELLED && 
+            !showLandlordView && 
+            blockchainRequest.status === RepairRequestStatusType.PENDING) {
+          return true;
+        }
+        // Filter other statuses based on valid transitions
+        const validTransitions = getValidTransitions(blockchainRequest.status);
+        return validTransitions.includes(status);
+      })
+    : availableStatusUpdates;
+
+  const handleBlockchainTransaction = useCallback(async (
+    action: string,
+    formData: FormData,
+    workDetailsHash?: HexString,
+    statusValue?: number
+  ) => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+
+    try {
+      addToast(
+        "Please confirm the transaction in your wallet",
+        "info",
+        "Waiting for Confirmation"
+      );
+
+      const updateDatabase = async (endpoint: string, data: any) => {
+        try {
+          const response = await fetch(`/api/repair-requests/${repairRequest.id}/${endpoint}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          });
+          
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || `Failed to update database: ${response.statusText}`);
+          }
+          
+          return response.json();
+        } catch (error) {
+          console.error('Database update error:', error);
+          throw error;
+        }
+      };
+
+      if (action === "updateWorkDetails" && workDetailsHash) {
+        await updateWorkDetails(BigInt(repairRequest.id), workDetailsHash);
+        const result = await updateDatabase('work-details', { 
+          workDetails: formData.get("workDetails") 
+        });
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        addToast(
+          "Work details have been successfully updated",
+          "success",
+          "Update Successful"
+        );
+      }
+      else if (action === "updateStatus" && typeof statusValue === 'number') {
+        // Validate status value
+        if (!(statusValue in RepairRequestStatusType)) {
+          throw new Error('Invalid status value');
+        }
+
+        // Verify the status transition is valid based on blockchain state
+        if (blockchainRequest) {
+          const validTransitions = getValidTransitions(blockchainRequest.status);
+          if (!validTransitions.includes(statusValue as RepairRequestStatusType)) {
+            throw new Error(`Invalid status transition from ${RepairRequestStatusType[blockchainRequest.status]} to ${RepairRequestStatusType[statusValue]}`);
+          }
+        }
+
+        try {
+          await updateStatus(BigInt(repairRequest.id), statusValue as RepairRequestStatusType);
+          const dbStatus = statusMap[statusValue as RepairRequestStatusType];
+          if (!dbStatus) {
+            throw new Error('Invalid status mapping');
+          }
+          const result = await updateDatabase('status', { status: dbStatus });
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          addToast(
+            `Status has been successfully updated to ${statusLabels[statusValue as RepairRequestStatusType]}`,
+            "success",
+            "Update Successful"
+          );
+        } catch (error: any) {
+          // Log the error details
+          console.error('Status update error:', {
+            error,
+            message: error.message,
+            cause: error.cause,
+            stack: error.stack
+          });
+
+          // Re-throw the error to be handled by the outer catch block
+          throw error;
+        }
+      }
+      else if (action === "withdrawRequest") {
+        // Validate withdraw request conditions
+        const validationError = validateWithdrawRequest(repairRequest.status);
+        if (validationError) {
+          throw new Error(validationError);
+        }
+
+        // Also check blockchain state
+        if (blockchainRequest) {
+          const blockchainValidationError = validateWithdrawRequest(statusMap[blockchainRequest.status]);
+          if (blockchainValidationError) {
+            throw new Error(blockchainValidationError);
+          }
+        }
+
+        await withdrawRequest(BigInt(repairRequest.id));
+        const result = await updateDatabase('withdraw', {});
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        addToast(
+          "Request has been successfully withdrawn",
+          "success",
+          "Withdrawal Successful"
+        );
+      }
+      else if (action === "approveWork") {
+        // Validate approve work conditions
+        const validationError = validateApproveWork(repairRequest.status);
+        if (validationError) {
+          throw new Error(validationError);
+        }
+
+        // Also check blockchain state
+        if (blockchainRequest) {
+          const blockchainValidationError = validateApproveWork(statusMap[blockchainRequest.status]);
+          if (blockchainValidationError) {
+            throw new Error(blockchainValidationError);
+          }
+        }
+
+        const isAccepted = formData.get("isAccepted") === "true";
+        await approveWork(BigInt(repairRequest.id), isAccepted);
+        const result = await updateDatabase('approve', { isAccepted });
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        addToast(
+          `Work has been successfully ${isAccepted ? 'approved' : 'refused'}`,
+          "success",
+          isAccepted ? "Approval Successful" : "Work Refused"
+        );
+      }
+    } catch (error: any) {
+      console.error('Transaction error:', {
+        error,
+        message: error.message,
+        cause: error.cause,
+        stack: error.stack
+      });
+      
+      // Display a user-friendly error message
+      addToast(
+        error.message || "Failed to complete the transaction",
+        "error",
+        "Transaction Failed"
+      );
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [addToast, approveWork, isProcessing, repairRequest.id, updateStatus, updateWorkDetails, withdrawRequest, blockchainRequest, repairRequest.status]);
+
+  // Handle form submissions
+  useEffect(() => {
+    if (!isSubmitting && actionData?.success && !isProcessing && navigation.formData) {
+      const action = navigation.formData.get("_action");
+      if (!action) return;
+
+      handleBlockchainTransaction(
+        action.toString(),
+        navigation.formData,
+        actionData.workDetailsHash,
+        actionData.status
+      );
+    } else if (actionData?.error) {
+      addToast(actionData.error, "error", "Update Failed");
+    }
+  }, [actionData, isSubmitting, isProcessing, handleBlockchainTransaction, addToast, navigation.formData]);
+
   // Status action buttons
-  const statusButtons = availableStatusUpdates.map((status: RepairRequestStatusType) => (
+  const statusButtons = filteredStatusUpdates.map((status: RepairRequestStatusType) => (
     <Form key={status} method="post" className="inline-block">
       <input type="hidden" name="_action" value="updateStatus" />
       <input type="hidden" name="status" value={status} />
       <Button
         type="submit"
         variant={getStatusButtonVariant(status)}
-        disabled={isPending || isSubmitting}
-        size="sm"
+        disabled={isPending || isSubmitting || isProcessing || isLoading}
       >
         {getStatusActionLabel(status)}
       </Button>
@@ -394,8 +477,8 @@ export default function RepairRequestPage() {
           {showLandlordView ? (
             <LandlordView
               repairRequest={repairRequest}
-              availableStatusUpdates={availableStatusUpdates}
-              isPending={isPending}
+              availableStatusUpdates={filteredStatusUpdates}
+              isPending={isPending || isProcessing}
               addToast={addToast}
             >
               {statusButtons}
@@ -403,8 +486,8 @@ export default function RepairRequestPage() {
           ) : (
             <TenantView
               repairRequest={repairRequest}
-              availableStatusUpdates={availableStatusUpdates}
-              isPending={isPending}
+              availableStatusUpdates={filteredStatusUpdates}
+              isPending={isPending || isProcessing}
             />
           )}
 
