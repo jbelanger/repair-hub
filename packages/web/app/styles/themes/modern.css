@@ -1,12 +1,68 @@
 /* Modern Theme */
 .theme-modern {
+  /* Neutral Scale */
+  --color-neutral-white: #FFFFFF;
+  --color-neutral-black: #000000;
+  --color-neutral-bg: #211D28;
+  --color-neutral-light: #EFEFFF;
+
+  /* Primary Scale (Purple) */
+  --color-primary-500: #9A4DFF;  /* #9A4DFF rgb(154, 77, 255) */
+  --color-primary-900: #FFA7FF;  /* #FFA7FF rgb(255, 167, 255) */
+  --color-primary-800: #E090FF;  /* #E090FF rgb(224, 144, 255) */
+  --color-primary-700: #CF7AFF;  /* #CF7AFF rgb(207, 122, 255) */
+  --color-primary-600: #B563FF;  /* #B563FF rgb(181, 99, 255) */
+  --color-primary-400: #7F35FF;  /* #7F35FF rgb(127, 53, 255) */
+  --color-primary-300: #6218FF;  /* #6218FF rgb(98, 24, 255) */
+  --color-primary-200: #4000F3;  /* #4000F3 rgb(64, 0, 243) */
+  --color-primary-100: #0000DC;  /* #0000DC rgb(0, 0, 220) */
+
+  /* Secondary Scale (Pink) */
+  --color-secondary-500: #F600DD;  /* #F600DD rgb(246, 0, 221) */
+  --color-secondary-900: #FF86FF;  /* #FF86FF rgb(255, 134, 255) */
+  --color-secondary-800: #FF6CFF;  /* #FF6CFF rgb(255, 108, 255) */
+  --color-secondary-700: #FF4FFF;  /* #FF4FFF rgb(255, 79, 255) */
+  --color-secondary-600: #FF2DF4;  /* #FF2DF4 rgb(255, 45, 244) */
+  --color-secondary-400: #DD00C6;  /* #DD00C6 rgb(221, 0, 198) */
+  --color-secondary-300: #C400B0;  /* #C400B0 rgb(196, 0, 176) */
+  --color-secondary-200: #AC009A;  /* #AC009A rgb(172, 0, 154) */
+  --color-secondary-100: #94008B;  /* #94008B rgb(148, 0, 139) */
+
+  /* Tertiary Scale (Blue) */
+  --color-tertiary-500: #0093CD;  /* #0093CD rgb(0, 147, 205) */
+  --color-tertiary-900: #5EEBFF;  /* #5EEBFF rgb(94, 235, 255) */
+  --color-tertiary-800: #3BD4FF;  /* #3BD4FF rgb(59, 212, 255) */
+  --color-tertiary-700: #00BEFB;  /* #00BEFB rgb(0, 190, 251) */
+  --color-tertiary-600: #00A8E4;  /* #00A8E4 rgb(0, 168, 228) */
+  --color-tertiary-400: #007EB7;  /* #007EB7 rgb(0, 126, 183) */
+  --color-tertiary-300: #006AA1;  /* #006AA1 rgb(0, 106, 161) */
+  --color-tertiary-200: #00578C;  /* #00578C rgb(0, 87, 140) */
+  --color-tertiary-100: #004477;  /* #004477 rgb(0, 68, 119) */
+
+  /* Status Colors */
+  --color-success-bg: rgba(16, 185, 129, 0.2);
+  --color-success-border: rgba(16, 185, 129, 0.3);
+  --color-success-text: #10B981;
+
+  --color-info-bg: rgba(59, 130, 246, 0.2);
+  --color-info-border: rgba(59, 130, 246, 0.3);
+  --color-info-text: #3B82F6;
+
+  --color-warning-bg: rgba(245, 158, 11, 0.2);
+  --color-warning-border: rgba(245, 158, 11, 0.3);
+  --color-warning-text: #F59E0B;
+
+  --color-error-bg: rgba(239, 68, 68, 0.2);
+  --color-error-border: rgba(239, 68, 68, 0.3);
+  --color-error-text: #EF4444;
+
   /* Base colors */
-  --color-bg-primary: transparent;
-  --color-bg-secondary: rgba(26, 11, 56, 0.2);
+  --color-bg-primary: var(--color-neutral-black);
+  --color-bg-secondary: var(--color-neutral-bg);
   --color-bg-tertiary: rgba(26, 11, 56, 0.4);
   
   /* Text colors */
-  --color-text-primary: #FFFFFF;
+  --color-text-primary: var(--color-neutral-white);
   --color-text-secondary: rgba(255, 255, 255, 0.7);
   --color-text-tertiary: rgba(255, 255, 255, 0.5);
   
@@ -15,19 +71,14 @@
   --color-border-secondary: rgba(255, 255, 255, 0.12);
   
   /* Accent colors */
-  --color-accent-primary: #8B5CF6;
-  --color-accent-secondary: rgba(139, 92, 246, 0.2);
-  
-  /* Status colors */
-  --color-success: #10B981;
-  --color-success-bg: rgba(16, 185, 129, 0.2);
-  --color-warning: #F59E0B;
-  --color-warning-bg: rgba(245, 158, 11, 0.2);
-  --color-error: #EF4444;
-  --color-error-bg: rgba(239, 68, 68, 0.2);
+  --color-accent-primary: var(--color-primary-600);
+  --color-accent-secondary: rgba(181, 99, 255, 0.2);
+
+  /* Hover colors */
+  --color-hover-bg: rgba(127, 53, 255, 0.15);
   
   /* Chart colors */
-  --color-chart-1: #8B5CF6;
+  --color-chart-1: var(--color-primary-600);
   --color-chart-2: #10B981;
   --color-chart-3: #F59E0B;
   
@@ -50,6 +101,6 @@
   --backdrop-blur: blur(12px);
 
   /* Gradients */
-  --gradient-primary: linear-gradient(to right, #8B5CF6, #EC4899);
+  --gradient-primary: linear-gradient(to right, var(--color-primary-600), var(--color-secondary-400));
   --gradient-bg: radial-gradient(circle at center, #1A0B38, #0A0612, #0A0612);
 }

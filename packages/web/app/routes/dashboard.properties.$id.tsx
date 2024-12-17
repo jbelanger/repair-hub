@@ -4,7 +4,6 @@ import { Outlet, useLoaderData } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
 import { Mail, Plus, Users, Wrench } from "lucide-react";
-import { DashboardCard } from "~/components/ui/DashboardCard";
 import { Card } from "~/components/ui/Card";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { EmptyState } from "~/components/ui/EmptyState";
@@ -13,6 +12,7 @@ import { RepairStatus } from "~/components/ui/StatusBadge";
 import { Button, LinkButton } from "~/components/ui/Button";
 import { useToast, ToastManager } from "~/components/ui/Toast";
 import { ConfirmModal } from "~/components/ui/Modal";
+import { Badge } from "~/components/ui/Badge";
 import { useState } from "react";
 
 type TenantLease = {
@@ -155,25 +155,6 @@ export default function PropertyDetails(): ReactNode {
         backTo=".."
       />
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <DashboardCard
-          title="Active Tenants"
-          value={property.tenantLeases.length}
-          icon={Users}
-        />
-        <DashboardCard
-          title="Pending Invites"
-          value={property.invitations.length}
-          icon={Mail}
-        />
-        <DashboardCard
-          title="Open Repairs"
-          value={property.repairs.length}
-          icon={Wrench}
-        />
-      </div>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Current Tenants */}
         <Card
@@ -181,7 +162,8 @@ export default function PropertyDetails(): ReactNode {
           header={{
             title: "Current Tenants",
             icon: <Users className="h-5 w-5" />,
-            iconBackground: true
+            iconBackground: true,
+            extra: <Badge>{property.tenantLeases.length}</Badge>
           }}
         >
           <DataList<TenantLease>
@@ -226,7 +208,8 @@ export default function PropertyDetails(): ReactNode {
           header={{
             title: "Open Repairs",
             icon: <Wrench className="h-5 w-5" />,
-            iconBackground: true
+            iconBackground: true,
+            extra: <Badge>{property.repairs.length}</Badge>
           }}
         >
           <DataList<RepairRequest>
@@ -266,7 +249,8 @@ export default function PropertyDetails(): ReactNode {
           header={{
             title: "Pending Invitations",
             icon: <Mail className="h-5 w-5" />,
-            iconBackground: true
+            iconBackground: true,
+            extra: <Badge>{property.invitations.length}</Badge>
           }}
         >
           <DataList<Invitation>

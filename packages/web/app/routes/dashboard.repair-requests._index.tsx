@@ -97,18 +97,20 @@ function BlockchainStatus({ requestId }: { requestId: string }) {
     );
   }
 
+  const etherscanUrl = getEtherscanLink('address', CONTRACT_ADDRESSES.REPAIR_REQUEST);
+
   return (
-    <a
-      href={getEtherscanLink('address', CONTRACT_ADDRESSES.REPAIR_REQUEST)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-block"
+    <Badge 
+      variant="success" 
+      className="text-green-400 cursor-pointer"
+      onClick={(e) => {
+        e.preventDefault(); // Prevent the parent Link from navigating
+        window.open(etherscanUrl, '_blank', 'noopener,noreferrer');
+      }}
     >
-      <Badge variant="success" className="text-green-400">
-        <LinkIcon className="h-4 w-4 mr-1" />
-        On Chain
-      </Badge>
-    </a>
+      <LinkIcon className="h-4 w-4 mr-1" />
+      On Chain
+    </Badge>
   );
 }
 

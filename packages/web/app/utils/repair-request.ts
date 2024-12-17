@@ -42,7 +42,47 @@ export function getAvailableStatusUpdates(
   }
 }
 
-// Convert blockchain status enum to database status string
+// Validate status transitions according to smart contract rules
+export function validateStatusTransition(currentStatus: string, newStatus: string): string | null {
+  // Convert database status strings to blockchain enum values
+  const currentEnum = Object.entries(statusMap).find(([_, value]) => value === currentStatus)?.[0];
+  const newEnum = Object.entries(statusMap).find(([_, value]) => value === newStatus)?.[0];
+
+  if (!currentEnum || !newEnum) {
+    return "Invalid status value";
+  }
+
+  const current = parseInt(currentEnum);
+  const next = parseInt(newEnum);
+
+  // Define valid transitions using enum values
+  const validTransitions: { [key in RepairRequestStatusType]: RepairRequestStatusType[] } = {
+    [RepairRequestStatusType.PENDING]: [
+      RepairRequestStatusType.IN_PROGRESS,
+      RepairRequestStatusType.REJECTED,
+      RepairRequestStatusType.CANCELLED
+    ],
+    [RepairRequestStatusType.IN_PROGRESS]: [
+      RepairRequestStatusType.COMPLETED
+    ],
+    [RepairRequestStatusType.COMPLETED]: [
+      RepairRequestStatusType.ACCEPTED,
+      RepairRequestStatusType.REFUSED
+    ],
+    [RepairRequestStatusType.ACCEPTED]: [],
+    [RepairRequestStatusType.REFUSED]: [],
+    [RepairRequestStatusType.REJECTED]: [],
+    [RepairRequestStatusType.CANCELLED]: []
+  };
+
+  if (!validTransitions[current as RepairRequestStatusType]?.includes(next as RepairRequestStatusType)) {
+    return `Invalid transition from ${currentStatus} to ${newStatus}`;
+  }
+
+  return null;
+}
+
+// Convert blockchain status enum to database status string with proper typing
 export const statusMap = {
   [RepairRequestStatusType.PENDING]: "PENDING",
   [RepairRequestStatusType.IN_PROGRESS]: "IN_PROGRESS",
@@ -52,3 +92,10 @@ export const statusMap = {
   [RepairRequestStatusType.REJECTED]: "REJECTED",
   [RepairRequestStatusType.CANCELLED]: "CANCELLED",
 } as const;
+
+// Create a reverse mapping for looking up enum values from status strings
+export const reverseStatusMap: { [K in typeof statusMap[keyof typeof statusMap]]: RepairRequestStatusType } = 
+  Object.entries(statusMap).reduce((acc, [key, value]) => ({
+    ...acc,
+    [value]: Number(key) as RepairRequestStatusType
+  }), {} as { [K in typeof statusMap[keyof typeof statusMap]]: RepairRequestStatusType });

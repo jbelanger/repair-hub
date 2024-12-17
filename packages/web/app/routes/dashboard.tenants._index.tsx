@@ -5,6 +5,7 @@ import { requireUser } from "~/utils/session.server";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { Card } from "~/components/ui/Card";
 import { Users } from "lucide-react";
+import { LinkButton } from "~/components/ui/Button";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -73,14 +74,25 @@ export default function TenantsIndex() {
                 <div key={tenant.id} className="py-4">
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="font-medium">{tenant.tenant.email}</p>
-                      <p className="text-sm text-[var(--color-text-secondary)]">
-                        {tenant.property.address}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{tenant.tenant.name || tenant.tenant.email}</p>
+                      </div>
+                      <div className="flex items-center gap-4 mt-1">
+                        <p className="text-sm text-[var(--color-text-secondary)]">
+                          {tenant.property.address}
+                        </p>
+                        <span className="text-sm text-[var(--color-text-secondary)]">
+                          {new Date(tenant.startDate).toLocaleDateString()} - {new Date(tenant.endDate).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-sm text-[var(--color-text-secondary)]">
-                      {new Date(tenant.startDate).toLocaleDateString()} - {new Date(tenant.endDate).toLocaleDateString()}
-                    </div>
+                    <LinkButton
+                      to={tenant.tenant.id}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      View Details
+                    </LinkButton>
                   </div>
                 </div>
               ))

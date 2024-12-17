@@ -242,16 +242,7 @@ export default function DashboardIndex() {
             value: stats.repairs.change,
             trend: stats.repairs.change >= 0 ? 'up' : 'down'
           }}
-        />
-        <DashboardCard
-          title="Total Revenue"
-          value="$12,345"
-          icon={TrendingUp}
-          change={{
-            value: 12.5,
-            trend: 'up'
-          }}
-        />
+        />        
       </div>
 
       {/* Charts */}

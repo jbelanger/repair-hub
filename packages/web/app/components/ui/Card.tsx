@@ -21,12 +21,12 @@ export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
 
 const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ className, as: Component = "div", variant = "default", header, stats, hover, accent = "none", children, ...props }, ref) => {
-    const baseStyles = "rounded-[var(--card-radius)] transition-all duration-200 backdrop-blur-[var(--backdrop-blur)]";
+    const baseStyles = "rounded-[var(--card-radius)] transition-colors duration-300 backdrop-blur-[var(--backdrop-blur)]";
     const variantStyles = {
       default: "p-4",
       empty: "p-6 text-center",
-      interactive: "p-4 hover:border-[var(--color-border-hover)] hover:bg-white/[0.02]",
-      property: "p-6 hover:border-[var(--color-border-hover)]"
+      interactive: "p-4 cursor-pointer hover:bg-[var(--color-hover-bg)]",
+      property: "p-6 cursor-pointer hover:bg-[var(--color-hover-bg)]"
     };
     const accentStyles = {
       none: "",
@@ -39,7 +39,7 @@ const Card = forwardRef<HTMLDivElement, CardProps>(
       baseStyles,
       variantStyles[variant],
       accentStyles[accent],
-      hover && "hover:border-[var(--color-border-hover)] hover:bg-white/[0.02]",
+      hover && "cursor-pointer hover:bg-[var(--color-hover-bg)]",
       "bg-[var(--card-bg)] border border-[var(--card-border)] shadow-[var(--shadow-md)]",
       className
     );

@@ -1,7 +1,7 @@
 import { cn } from "~/utils/cn";
 
 interface BadgeProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: "default" | "primary" | "success" | "warning" | "danger";
+  variant?: "default" | "primary" | "success" | "info" | "warning" | "danger";
   size?: "sm" | "md";
 }
 
@@ -12,22 +12,23 @@ export function Badge({
   ...props 
 }: BadgeProps) {
   const variants = {
-    default: "bg-purple-600/20 text-purple-100 border-purple-500/40 shadow-[0_0_10px_rgba(168,85,247,0.1)]",
-    primary: "bg-blue-500/20 text-blue-100 border-blue-500/40 shadow-[0_0_10px_rgba(59,130,246,0.1)]",
-    success: "bg-green-500/20 text-green-100 border-green-500/40 shadow-[0_0_10px_rgba(34,197,94,0.1)]",
-    warning: "bg-yellow-500/20 text-yellow-100 border-yellow-500/40 shadow-[0_0_10px_rgba(234,179,8,0.1)]",
-    danger: "bg-red-500/20 text-red-100 border-red-500/40 shadow-[0_0_10px_rgba(239,68,68,0.1)]",
+    default: "bg-[var(--color-accent-secondary)] text-[var(--color-accent-primary)] border-[var(--color-border-primary)]",
+    primary: "bg-[var(--color-accent-secondary)] text-[var(--color-accent-primary)] border-[var(--color-border-primary)]",
+    success: "bg-[var(--color-success-bg)] text-[var(--color-success-text)] border-[var(--color-success-border)]",
+    info: "bg-[var(--color-info-bg)] text-[var(--color-info-text)] border-[var(--color-info-border)]",
+    warning: "bg-[var(--color-warning-bg)] text-[var(--color-warning-text)] border-[var(--color-warning-border)]",
+    danger: "bg-[var(--color-error-bg)] text-[var(--color-error-text)] border-[var(--color-error-border)]",
   };
 
   const sizes = {
-    sm: "px-2.5 py-0.5 text-xs",
-    md: "px-3 py-1 text-sm",
+    sm: "px-2.5 py-0.5 text-xs font-medium",
+    md: "px-3 py-1 text-sm font-medium",
   };
 
   return (
     <div
       className={cn(
-        "inline-flex items-center rounded-full border font-semibold border-[1.5px]",
+        "inline-flex items-center rounded-full border backdrop-blur-[var(--backdrop-blur)]",
         variants[variant],
         sizes[size],
         className

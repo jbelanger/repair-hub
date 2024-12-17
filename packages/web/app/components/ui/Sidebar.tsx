@@ -119,7 +119,7 @@ export function Sidebar({ user, counts }: SidebarProps) {
         <div className="flex items-center gap-3">
           <Logo logoSrc="/logo5.svg" size={collapsed ? "md" : "lg"} showText={false} className="py-1" />
           {!collapsed && (
-            <span className="text-xl font-bold tracking-tight text-white/90">
+            <span className="text-xl font-bold tracking-tight text-[var(--color-neutral-white)]">
               RepairHub
             </span>
           )}
@@ -144,27 +144,28 @@ export function Sidebar({ user, counts }: SidebarProps) {
             key={item.name}
             to={item.to}
             className={cn(
-              "flex items-center px-3 py-2 rounded-lg transition-colors duration-200",
+              "flex items-center px-3 py-2 rounded-lg transition-colors duration-300",
               item.current
-                ? "bg-[var(--color-accent-secondary)] text-[var(--color-accent-primary)]"
+                ? "bg-[var(--color-hover-bg)] text-[var(--color-text-primary)] hover:bg-[var(--color-primary-400)]/20"
                 : "hover:bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
             )}
           >
-            <item.icon className="h-5 w-5" />
+            <item.icon className={cn(
+              "h-5 w-5",
+              item.current && "text-[var(--color-text-primary)]"
+            )} />
             {!collapsed && (
               <>
                 <span className="ml-3">{item.name}</span>
                 {item.count !== undefined && (
-                  <span
+                  <div
                     className={cn(
-                      "ml-auto rounded-full px-2 py-0.5 text-xs",
-                      item.current
-                        ? "bg-[var(--color-accent-secondary)]"
-                        : "bg-[var(--color-bg-tertiary)]"
+                      "ml-auto inline-flex items-center rounded-full border backdrop-blur-[var(--backdrop-blur)] px-2.5 py-0.5 text-xs font-medium",
+                      "bg-[var(--color-accent-secondary)] text-[var(--color-accent-primary)] border-[var(--color-border-primary)]"
                     )}
                   >
                     {item.count}
-                  </span>
+                  </div>
                 )}
               </>
             )}

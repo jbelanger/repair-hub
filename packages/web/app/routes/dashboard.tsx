@@ -1,5 +1,8 @@
 import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
 import { Outlet, useLoaderData } from "@remix-run/react";
+import { useAccount } from 'wagmi';
+import { useEffect } from 'react';
+import { useNavigate } from '@remix-run/react';
 import { ConnectWallet } from "~/components/ConnectWallet";
 import { RoleSwitcher } from "~/components/RoleSwitcher";
 import { requireUser } from "~/utils/session.server";
