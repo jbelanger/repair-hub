@@ -1,6 +1,6 @@
-import { json, type LoaderFunctionArgs } from "@remix-run/node";
+import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
-import { Building2, Wrench, Users, TrendingUp } from "lucide-react";
+import { Building2, Wrench, Users } from "lucide-react";
 import { DashboardCard } from "~/components/ui/DashboardCard";
 import { BarChart } from "~/components/ui/BarChart";
 import { db } from "~/utils/db.server";
@@ -22,19 +22,6 @@ interface LandlordStats {
   tenants: Metric;
   repairs: Metric;
   repairTrends: RepairTrend[];
-}
-
-interface TenantStats {
-  repairs: Metric;
-  repairTrends: RepairTrend[];
-}
-
-type LoaderData = {
-  stats: LandlordStats | TenantStats;
-};
-
-function isLandlordStats(stats: LandlordStats | TenantStats): stats is LandlordStats {
-  return 'properties' in stats;
 }
 
 async function getMonthOverMonthChange(
@@ -84,7 +71,7 @@ async function getMonthOverMonthChange(
   return ((currentCount - previousCount) / previousCount) * 100;
 }
 
-async function getRepairTrends(userId: string, role: string) {
+async function getRepairTrends(userId: string) {
   const now = new Date();
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = new Date();
@@ -99,9 +86,7 @@ async function getRepairTrends(userId: string, role: string) {
 
       const count = await db.repairRequest.count({
         where: {
-          ...(role === "LANDLORD"
-            ? { property: { landlordId: userId } }
-            : { initiatorId: userId }),
+          property: { landlordId: userId },
           createdAt: {
             gte: startOfMonth,
             lte: endOfMonth,
@@ -123,86 +108,65 @@ async function getRepairTrends(userId: string, role: string) {
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
 
-  if (user.role === "LANDLORD") {
-    const [
-      propertiesCount,
-      activeTenantsCount,
-      activeRepairsCount,
-      repairTrends
-    ] = await Promise.all([
-      db.property.count({
-        where: { landlordId: user.id }
-      }),
-      db.propertyTenant.count({
-        where: {
-          property: { landlordId: user.id },
-          status: "ACTIVE"
-        }
-      }),
-      db.repairRequest.count({
-        where: {
-          property: { landlordId: user.id },
-          status: {
-            in: ["PENDING", "IN_PROGRESS"]
-          }
-        }
-      }),
-      getRepairTrends(user.id, user.role)
-    ]);
-
-    // Get month-over-month changes
-    const [
-      propertiesChange,
-      tenantsChange,
-      repairsChange
-    ] = await Promise.all([
-      getMonthOverMonthChange(propertiesCount, user.id, 'properties'),
-      getMonthOverMonthChange(activeTenantsCount, user.id, 'tenants'),
-      getMonthOverMonthChange(activeRepairsCount, user.id, 'repairs')
-    ]);
-
-    return json({
-      stats: {
-        properties: {
-          count: propertiesCount,
-          change: propertiesChange
-        },
-        tenants: {
-          count: activeTenantsCount,
-          change: tenantsChange
-        },
-        repairs: {
-          count: activeRepairsCount,
-          change: repairsChange
-        },
-        repairTrends
-      } satisfies LandlordStats
-    });
-  } else {
-    const [activeRepairsCount, repairTrends] = await Promise.all([
-      db.repairRequest.count({
-        where: {
-          initiatorId: user.id,
-          status: {
-            in: ["PENDING", "IN_PROGRESS"]
-          }
-        }
-      }),
-      getRepairTrends(user.id, user.role)
-    ]);
-
-    const repairsChange = await getMonthOverMonthChange(activeRepairsCount, user.id, 'repairs');
-
-    return json({
-      stats: {
-        repairs: {
-          count: activeRepairsCount,
-          change: repairsChange
-        },
-        repairTrends
-      } satisfies TenantStats
-    });
+  // Redirect tenants to their repair requests page
+  if (user.role !== "LANDLORD") {
+    return redirect("/dashboard/repair-requests");
   }
+
+  const [
+    propertiesCount,
+    activeTenantsCount,
+    activeRepairsCount,
+    repairTrends
+  ] = await Promise.all([
+    db.property.count({
+      where: { landlordId: user.id }
+    }),
+    db.propertyTenant.count({
+      where: {
+        property: { landlordId: user.id },
+        status: "ACTIVE"
+      }
+    }),
+    db.repairRequest.count({
+      where: {
+        property: { landlordId: user.id },
+        status: {
+          in: ["PENDING", "IN_PROGRESS"]
+        }
+      }
+    }),
+    getRepairTrends(user.id)
+  ]);
+
+  // Get month-over-month changes
+  const [
+    propertiesChange,
+    tenantsChange,
+    repairsChange
+  ] = await Promise.all([
+    getMonthOverMonthChange(propertiesCount, user.id, 'properties'),
+    getMonthOverMonthChange(activeTenantsCount, user.id, 'tenants'),
+    getMonthOverMonthChange(activeRepairsCount, user.id, 'repairs')
+  ]);
+
+  return json({
+    stats: {
+      properties: {
+        count: propertiesCount,
+        change: propertiesChange
+      },
+      tenants: {
+        count: activeTenantsCount,
+        change: tenantsChange
+      },
+      repairs: {
+        count: activeRepairsCount,
+        change: repairsChange
+      },
+      repairTrends
+    } satisfies LandlordStats
+  });
 }
 
 export default function DashboardIndex() {
@@ -212,28 +176,24 @@ export default function DashboardIndex() {
     <div className="p-6 space-y-6">
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {isLandlordStats(stats) && (
-          <>
-            <DashboardCard
-              title="Total Properties"
-              value={stats.properties.count}
-              icon={Building2}
-              change={{
-                value: stats.properties.change,
-                trend: stats.properties.change >= 0 ? 'up' : 'down'
-              }}
-            />
-            <DashboardCard
-              title="Active Tenants"
-              value={stats.tenants.count}
-              icon={Users}
-              change={{
-                value: stats.tenants.change,
-                trend: stats.tenants.change >= 0 ? 'up' : 'down'
-              }}
-            />
-          </>
-        )}
+        <DashboardCard
+          title="Total Properties"
+          value={stats.properties.count}
+          icon={Building2}
+          change={{
+            value: stats.properties.change,
+            trend: stats.properties.change >= 0 ? 'up' : 'down'
+          }}
+        />
+        <DashboardCard
+          title="Active Tenants"
+          value={stats.tenants.count}
+          icon={Users}
+          change={{
+            value: stats.tenants.change,
+            trend: stats.tenants.change >= 0 ? 'up' : 'down'
+          }}
+        />
         <DashboardCard
           title="Active Repairs"
           value={stats.repairs.count}

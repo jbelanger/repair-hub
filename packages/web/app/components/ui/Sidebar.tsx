@@ -42,14 +42,14 @@ export function Sidebar({ user, counts }: SidebarProps) {
   const location = useLocation();
   const { theme, setTheme } = useTheme();
 
-  // Base navigation items for all users
+  // Base navigation items - Dashboard only for landlords
   const baseNavigation: NavigationItem[] = [
-    {
+    ...(user.role === 'LANDLORD' ? [{
       name: "Dashboard",
       to: ".",
       icon: LayoutDashboard,
       current: location.pathname === "/dashboard",
-    },
+    }] : []),
     {
       name: "Settings",
       to: "profile",
@@ -97,7 +97,7 @@ export function Sidebar({ user, counts }: SidebarProps) {
 
   // Combine base navigation with role-specific items
   const navigation = [
-    ...baseNavigation.slice(0, 1), // Dashboard first
+    ...baseNavigation.slice(0, 1), // Dashboard first (if present)
     ...(roleNavigation[user.role] || []),
     ...baseNavigation.slice(1) // Settings last
   ];

@@ -1,5 +1,5 @@
 import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
-import { Outlet, useLoaderData } from "@remix-run/react";
+import { Outlet, useLoaderData, Link, useLocation } from "@remix-run/react";
 import { ConnectWallet } from "~/components/ConnectWallet";
 import { requireUser } from "~/utils/session.server";
 import { Search } from "~/components/ui/Search";
@@ -10,6 +10,8 @@ import { Notifications } from "~/components/Notifications";
 import { RoleSwitcher } from "~/components/RoleSwitcher";
 import { useAccount } from "wagmi";
 import { Card } from "~/components/ui/Card";
+import { Logo } from "~/components/Logo";
+import { cn } from "~/utils/cn";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   try {
@@ -96,6 +98,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function AppLayout() {
   const { user, counts, notifications } = useLoaderData<typeof loader>();
   const { isConnected } = useAccount();
+  const isTenant = user.role === 'TENANT';
+  const location = useLocation();
 
   // Show wallet connection UI if wallet is disconnected
   if (!isConnected) {
@@ -153,12 +157,39 @@ export default function AppLayout() {
           backgroundColor: 'var(--card-bg)',
           borderBottom: '1px solid var(--card-border)'
         }}>
-          {/* Left: Empty space for alignment */}
-          <div className="w-[var(--sidebar-width)]"></div>
+          {/* Left: Logo and Navigation */}
+          <div className={isTenant ? "flex items-center gap-6" : "w-[var(--sidebar-width)]"}>
+            {isTenant && (
+              <>
+                <div className="flex items-center gap-3">
+                  <Logo logoSrc="/logo5.svg" size="lg" showText={false} className="py-1" />
+                  <span className="text-xl font-bold tracking-tight text-[var(--color-neutral-white)]">
+                    RepairHub
+                  </span>
+                </div>
+                <Link
+                  to="/dashboard/repair-requests"
+                  className={cn(
+                    "flex items-center gap-2 text-sm font-medium",
+                    location.pathname.startsWith('/dashboard/repair-requests')
+                      ? "text-[var(--color-text-primary)]"
+                      : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                  )}
+                >
+                  Repair Requests
+                  {counts.repairs > 0 && (
+                    <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-[var(--color-accent-secondary)] text-[var(--color-accent-primary)]">
+                      {counts.repairs}
+                    </span>
+                  )}
+                </Link>
+              </>
+            )}
+          </div>
 
-          {/* Center: Search */}
+          {/* Center: Search (only for landlords) */}
           <div className="flex-1 max-w-xl mx-4">
-            <Search className="w-full" />
+            {!isTenant && <Search className="w-full" />}
           </div>
 
           {/* Right: Actions */}
@@ -168,12 +199,17 @@ export default function AppLayout() {
               notifications={notifications.general}
             />
             <RoleSwitcher currentRole={user.role} />
-            <button
-              className="p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)]"
-              style={{ color: 'var(--color-text-secondary)' }}
+            <Link
+              to="/dashboard/profile"
+              className={cn(
+                "p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)]",
+                location.pathname === "/dashboard/profile"
+                  ? "bg-[var(--color-hover-bg)] text-[var(--color-text-primary)]"
+                  : "text-[var(--color-text-secondary)]"
+              )}
             >
               <Settings className="h-5 w-5" />
-            </button>
+            </Link>
             <ConnectWallet />
           </div>
         </div>
@@ -181,14 +217,22 @@ export default function AppLayout() {
 
       {/* Main Layout */}
       <div className="flex min-h-screen">
-        {/* Sidebar */}
-        <Sidebar user={user} counts={counts} />
+        {/* Sidebar (only for landlords) */}
+        {!isTenant && <Sidebar user={user} counts={counts} />}
 
         {/* Main Content */}
-        <main className="flex-1 mt-16 overflow-auto">
-          <div className="h-full p-6">
-            <Outlet />
-          </div>
+        <main className={`flex-1 mt-16 overflow-auto ${isTenant ? 'ml-0' : ''}`}>
+          {isTenant ? (
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="py-8">
+                <Outlet />
+              </div>
+            </div>
+          ) : (
+            <div className="h-full p-6">
+              <Outlet />
+            </div>
+          )}
         </main>
       </div>
     </div>
