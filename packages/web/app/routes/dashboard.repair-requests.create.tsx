@@ -39,6 +39,7 @@ type LoaderData = {
     address: string;
     leaseId: string;
     landlordAddress: Address;
+    landlordId: string;
   }[];
 };
 
@@ -63,6 +64,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       address: true,
       landlord: {
         select: {
+          id: true,
           address: true
         }
       },
@@ -82,7 +84,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     id: property.id,
     address: property.address,
     leaseId: property.tenantLeases[0].id,
-    landlordAddress: toHexString(property.landlord.address) as Address
+    landlordAddress: toHexString(property.landlord.address) as Address,
+    landlordId: property.landlord.id
   }));
 
   return json<LoaderData>({ user, properties: transformedProperties });
@@ -104,6 +107,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const description = formData.get("description") as string;
   const urgency = formData.get("urgency") as string;
   const blockchainId = formData.get("blockchainId") as string;
+  const landlordId = formData.get("landlordId") as string;
 
   const fields = { propertyId, description, urgency };
   const fieldErrors = {
@@ -172,6 +176,17 @@ export async function action({ request }: ActionFunctionArgs) {
           leaseId: property.tenantLeases[0].id,
           attachments: "",
         },
+      });
+
+      // Create notification for landlord
+      await db.notification.create({
+        data: {
+          userId: landlordId,
+          type: 'repair_request_created',
+          title: 'New Repair Request',
+          message: `A new repair request (#${blockchainId}) has been created`,
+          data: JSON.stringify({ repairRequestId: blockchainId })
+        }
       });
 
       return json<ActionData>({ 
@@ -274,6 +289,7 @@ export default function CreateRepairRequest() {
         formData.append("description", actionData.fields.description);
         formData.append("urgency", actionData.fields.urgency);
         formData.append("blockchainId", result.value.id.toString());
+        formData.append("landlordId", selectedProperty.landlordId);
   
         submit(formData, { method: "post", replace: true });
         setIsWaitingForTransaction(false);
@@ -397,11 +413,4 @@ export default function CreateRepairRequest() {
       <ToastManager toasts={toasts} removeToast={removeToast} />
     </div>
   );
-  }
-  
-  
-  
-  
-  
-  
-  
+}

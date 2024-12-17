@@ -23,6 +23,44 @@ interface NotificationsProps {
   notifications: Notification[];
 }
 
+// Helper function to get notification color based on type
+function getNotificationColors(type: string): { bg: string; text: string } {
+  switch (type) {
+    case 'repair_request_accepted':
+      return {
+        bg: 'var(--color-success-bg)',
+        text: 'var(--color-success-text)'
+      };
+    case 'repair_request_refused':
+    case 'repair_request_rejected':
+      return {
+        bg: 'var(--color-error-bg)',
+        text: 'var(--color-error-text)'
+      };
+    case 'repair_request_in_progress':
+    case 'repair_request_completed':
+      return {
+        bg: 'var(--color-warning-bg)',
+        text: 'var(--color-warning-text)'
+      };
+    case 'repair_request_created':
+      return {
+        bg: 'var(--color-secondary-bg, rgba(246, 0, 221, 0.1))',
+        text: 'var(--color-secondary-500)'
+      };
+    case 'work_details_updated':
+      return {
+        bg: 'var(--color-info-bg)',
+        text: 'var(--color-info-text)'
+      };
+    default:
+      return {
+        bg: 'var(--color-tertiary-bg, rgba(0, 147, 205, 0.1))',
+        text: 'var(--color-tertiary-500)'
+      };
+  }
+}
+
 export function Notifications({ invitations, notifications }: NotificationsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -173,26 +211,40 @@ export function Notifications({ invitations, notifications }: NotificationsProps
                 ))}
 
                 {/* General Notifications */}
-                {notifications.map((notification, index) => (
-                  <li 
-                    key={notification.id} 
-                    className="p-4 hover:bg-purple-500/10 transition-all duration-200"
-                    style={{
-                      animationDelay: `${(invitations.length + index) * 50}ms`,
-                      animation: isAnimating ? 'none' : 'slideIn 0.3s ease-out forwards'
-                    }}
-                  >
-                    <p className="font-medium text-white">
-                      {notification.title}
-                    </p>
-                    <p className="text-sm text-emerald-400 mt-1">
-                      {notification.message}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-2">
-                      {new Date(notification.createdAt).toLocaleString()}
-                    </p>
-                  </li>
-                ))}
+                {notifications.map((notification, index) => {
+                  const colors = getNotificationColors(notification.type);
+                  return (
+                    <li 
+                      key={notification.id} 
+                      className="p-4 hover:bg-purple-500/10 transition-all duration-200"
+                      style={{
+                        animationDelay: `${(invitations.length + index) * 50}ms`,
+                        animation: isAnimating ? 'none' : 'slideIn 0.3s ease-out forwards'
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-white">
+                          {notification.title}
+                        </p>
+                        <span 
+                          className="px-2 py-0.5 text-xs rounded-full"
+                          style={{
+                            backgroundColor: colors.bg,
+                            color: colors.text
+                          }}
+                        >
+                          {notification.type.split('_').slice(1).join(' ')}
+                        </span>
+                      </div>
+                      <p className="text-sm mt-1" style={{ color: colors.text }}>
+                        {notification.message}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-2">
+                        {new Date(notification.createdAt).toLocaleString()}
+                      </p>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>

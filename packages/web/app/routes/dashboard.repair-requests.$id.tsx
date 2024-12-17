@@ -175,6 +175,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
       const workDetailsHash = hashToHexSync(workDetails);
 
+      // Create notification for tenant
+      await db.notification.create({
+        data: {
+          userId: repairRequest.initiator.id,
+          type: 'work_details_updated',
+          title: 'Work Details Updated',
+          message: `The work details for your repair request (#${id}) have been updated`,
+          data: JSON.stringify({ repairRequestId: id })
+        }
+      });
+
       return json({ 
         success: true,
         workDetailsHash,
@@ -202,6 +213,43 @@ export async function action({ request, params }: ActionFunctionArgs) {
         return json({ error: "Invalid status transition" }, { status: 400 });
       }
 
+      // Create notification based on new status
+      switch (numericStatus) {
+        case RepairRequestStatusType.IN_PROGRESS:
+          await db.notification.create({
+            data: {
+              userId: repairRequest.initiator.id,
+              type: 'repair_request_in_progress',
+              title: 'Repair Request In Progress',
+              message: `Your repair request (#${id}) is now being worked on`,
+              data: JSON.stringify({ repairRequestId: id })
+            }
+          });
+          break;
+        case RepairRequestStatusType.COMPLETED:
+          await db.notification.create({
+            data: {
+              userId: repairRequest.initiator.id,
+              type: 'repair_request_completed',
+              title: 'Repair Work Completed',
+              message: `The repair work for your request (#${id}) has been completed. Please review and accept/refuse the work.`,
+              data: JSON.stringify({ repairRequestId: id })
+            }
+          });
+          break;
+        case RepairRequestStatusType.REJECTED:
+          await db.notification.create({
+            data: {
+              userId: repairRequest.initiator.id,
+              type: 'repair_request_rejected',
+              title: 'Repair Request Rejected',
+              message: `Your repair request (#${id}) has been rejected by the landlord`,
+              data: JSON.stringify({ repairRequestId: id })
+            }
+          });
+          break;
+      }
+
       return json({ 
         success: true,
         status: numericStatus
@@ -218,6 +266,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
         return json({ error: "Can only withdraw pending requests" }, { status: 400 });
       }
 
+      // Create notification for landlord
+      await db.notification.create({
+        data: {
+          userId: repairRequest.property.landlord.id,
+          type: 'repair_request_cancelled',
+          title: 'Repair Request Cancelled',
+          message: `Repair request #${id} has been cancelled by the tenant`,
+          data: JSON.stringify({ repairRequestId: id })
+        }
+      });
+
       return json({ success: true });
     }
 
@@ -230,6 +289,21 @@ export async function action({ request, params }: ActionFunctionArgs) {
       if (blockchainRequest.status !== RepairRequestStatusType.COMPLETED) {
         return json({ error: "Can only approve/refuse completed work" }, { status: 400 });
       }
+
+      const isAccepted = formData.get("isAccepted") === "true";
+
+      // Create notification for landlord
+      await db.notification.create({
+        data: {
+          userId: repairRequest.property.landlord.id,
+          type: isAccepted ? 'repair_request_accepted' : 'repair_request_refused',
+          title: isAccepted ? 'Repair Work Accepted' : 'Repair Work Refused',
+          message: isAccepted 
+            ? `The tenant has accepted the completed work for repair request #${id}`
+            : `The tenant has refused the completed work for repair request #${id}. Please review and make necessary adjustments.`,
+          data: JSON.stringify({ repairRequestId: id })
+        }
+      });
 
       return json({ success: true });
     }
@@ -634,4 +708,5 @@ return (
   </div>
 );
 }
+
 

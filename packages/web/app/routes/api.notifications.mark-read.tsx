@@ -3,26 +3,39 @@ import { db } from "~/utils/db.server";
 import { requireUser } from "~/utils/session.server";
 
 export async function action({ request }: ActionFunctionArgs) {
-  const user = await requireUser(request);
-  const formData = await request.formData();
-  const notificationIds = (formData.get("ids") as string).split(",");
-
   try {
+    // Ensure user is authenticated
+    const user = await requireUser(request);
+
+    if (request.method !== "POST") {
+      return json({ error: "Method not allowed" }, { status: 405 });
+    }
+
+    const formData = await request.formData();
+    const ids = formData.get("ids")?.toString().split(",") || [];
+
+    if (ids.length === 0) {
+      return json({ error: "No notification IDs provided" }, { status: 400 });
+    }
+
+    // Mark notifications as read, but only if they belong to the current user
     await db.notification.updateMany({
       where: {
-        id: {
-          in: notificationIds
-        },
-        userId: user.id // Ensure user can only mark their own notifications as read
+        id: { in: ids },
+        userId: user.id,
+        read: false,
       },
       data: {
-        read: true
-      }
+        read: true,
+      },
     });
 
     return json({ success: true });
-  } catch (error) {
-    console.error("Mark notifications read error:", error);
-    return json({ success: false }, { status: 500 });
+  } catch (error: any) {
+    console.error("Error marking notifications as read:", error);
+    return json(
+      { error: error.message || "Failed to mark notifications as read" },
+      { status: 500 }
+    );
   }
 }

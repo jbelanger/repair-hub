@@ -12,7 +12,11 @@ export function useRepairRequestEvents(repairRequestId: string) {
   const publicClient = usePublicClient();
 
   // Create a stable callback for event handling
-  const handleEvent = useCallback((type: BlockchainEvent['type'], timestamp: bigint, data = {}) => {
+  const handleEvent = useCallback((
+    type: BlockchainEvent['type'], 
+    timestamp: bigint, 
+    data = {}
+  ) => {
     setEvents(prev => {
       const exists = prev.some(e => 
         e.type === type && 
@@ -128,7 +132,9 @@ export function useRepairRequestEvents(repairRequestId: string) {
             });
             const args = decoded.args as any;
             if (args.id.toString() === repairRequestId) {
-              handleEvent('workDetailsUpdated', args.updatedAt, { oldHash: args.oldHash, newHash: args.newHash });
+              handleEvent('workDetailsUpdated', args.updatedAt, 
+                { oldHash: args.oldHash, newHash: args.newHash }
+              );
             }
           } catch (error) {
             console.error('Error decoding WorkDetailsUpdated event:', error);
@@ -205,7 +211,9 @@ export function useRepairRequestEvents(repairRequestId: string) {
           });
           const args = decoded.args as any;
           if (args.id.toString() === repairRequestId) {
-            handleEvent('workDetailsUpdated', args.updatedAt, { oldHash: args.oldHash, newHash: args.newHash });
+            handleEvent('workDetailsUpdated', args.updatedAt, 
+              { oldHash: args.oldHash, newHash: args.newHash }
+            );
           }
         } catch (error) {
           console.error('Error handling WorkDetailsUpdated event:', error);

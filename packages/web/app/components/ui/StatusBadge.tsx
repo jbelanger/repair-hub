@@ -25,18 +25,18 @@ interface StatusBadgeProps {
 }
 
 type StatusVariant = {
-  variant: "warning" | "primary" | "success" | "danger" | "default";
+  variant: "warning" | "primary" | "success" | "danger" | "default" | "info";
   label: string;
 };
 
 const statusVariants: Record<StatusType, StatusVariant> = {
   pending: { variant: "warning", label: "Pending" },
-  in_progress: { variant: "primary", label: "In Progress" },
-  completed: { variant: "success", label: "Completed" },
+  in_progress: { variant: "info", label: "In Progress" },
+  completed: { variant: "primary", label: "Completed" },
   accepted: { variant: "success", label: "Accepted" },
   refused: { variant: "danger", label: "Refused" },
   rejected: { variant: "danger", label: "Rejected" },
-  cancelled: { variant: "default", label: "Cancelled" },
+  cancelled: { variant: "danger", label: "Cancelled" },
   active: { variant: "success", label: "Active" },
   inactive: { variant: "default", label: "Inactive" },
   expired: { variant: "danger", label: "Expired" }
@@ -45,7 +45,7 @@ const statusVariants: Record<StatusType, StatusVariant> = {
 const urgencyVariants: Record<UrgencyType, StatusVariant> = {
   high: { variant: "danger", label: "High Priority" },
   medium: { variant: "warning", label: "Medium Priority" },
-  low: { variant: "default", label: "Low Priority" }
+  low: { variant: "info", label: "Low Priority" }
 };
 
 export function StatusBadge({ status, type = "status", className }: StatusBadgeProps) {
