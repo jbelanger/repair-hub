@@ -18,6 +18,19 @@ export interface ContractRepairRequest {
   updatedAt: bigint;
 }
 
+// Serialized version of ContractRepairRequest for JSON responses
+export interface SerializedContractRepairRequest {
+  id: string;
+  initiator: Address;
+  landlord: Address;
+  propertyId: string;
+  descriptionHash: string;
+  workDetailsHash: string;
+  status: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type DecodedEventArgs = {
   id: bigint;
   initiator: Address;

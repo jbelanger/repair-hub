@@ -81,7 +81,7 @@ export function RepairRequestBlockchain({
                 <div className="flex-1 space-y-2">
                   <p className="text-white/70">Contract Address</p>
                   <a
-                    href={getEtherscanLink('address', CONTRACT_ADDRESSES.REPAIR_REQUEST)}
+                    href={getEtherscanLink('address', CONTRACT_ADDRESSES.REPAIR_REQUEST ?? '')}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-white text-sm font-mono hover:text-purple-300 transition-colors break-all"

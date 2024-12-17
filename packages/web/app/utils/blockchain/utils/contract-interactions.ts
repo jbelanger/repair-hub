@@ -126,6 +126,5 @@ export const decodeContractEvent = <T extends DecodedEventArgs>(
 
 export const getDefaultTransactionOptions = (gasLimit: bigint) => ({
   gas: gasLimit,
-  maxFeePerGas: 50000000000n, // 50 gwei
-  maxPriorityFeePerGas: 2500000000n, // 2.5 gwei
+  // Remove hardcoded gas values to let the wallet estimate them dynamically
 });

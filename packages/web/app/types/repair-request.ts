@@ -1,5 +1,6 @@
 import { type Address } from "~/utils/blockchain/types";
 import { RepairRequestStatusType } from "~/utils/blockchain/config";
+import { type SerializedContractRepairRequest } from "~/utils/blockchain/types/repair-request";
 
 export type LoaderData = {
   repairRequest: {
@@ -27,6 +28,7 @@ export type LoaderData = {
       address: Address;
     };
   };
+  blockchainRequest: SerializedContractRepairRequest;
   user: {
     id: string;
     role: string;
@@ -34,12 +36,14 @@ export type LoaderData = {
   };
   isLandlord: boolean;
   isTenant: boolean;
+  availableStatusUpdates: RepairRequestStatusType[];
 };
 
-export type BlockchainRepairRequest = {
+// Serialized version for display in UI
+export type SerializedBlockchainRepairRequest = {
   descriptionHash: string;
   workDetailsHash: string;
   initiator: Address;
-  createdAt: bigint;
-  updatedAt: bigint;
+  createdAt: string;
+  updatedAt: string;
 };

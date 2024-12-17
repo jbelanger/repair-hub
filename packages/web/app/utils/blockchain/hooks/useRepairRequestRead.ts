@@ -15,13 +15,14 @@ export function useRepairRequestRead(requestId?: bigint) {
     chainId: sepolia.id,
     query: {
       enabled: !!requestId,
-      retry: false,
-      // Disable automatic refetching
-      refetchOnMount: false,
-      refetchOnReconnect: false,
-      refetchOnWindowFocus: false,
-      // Keep data fresh for longer
-      staleTime: Infinity,
+      retry: true, // Enable retries
+      retryDelay: 1000, // Wait 1 second between retries
+      // Enable automatic refetching
+      refetchOnMount: true,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
+      // Keep data fresh
+      staleTime: 30000, // Consider data stale after 30 seconds
       // Cache for 5 minutes
       gcTime: 300000
     }

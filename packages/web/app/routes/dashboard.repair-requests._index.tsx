@@ -14,7 +14,8 @@ import { requireUser } from "~/utils/session.server";
 import { useRepairRequestRead } from "~/utils/blockchain/hooks/useRepairRequest";
 import { Badge } from "~/components/ui/Badge";
 import { getEtherscanLink } from "~/utils/blockchain/types";
-import { CONTRACT_ADDRESSES } from "~/utils/blockchain/config";
+import { CONTRACT_ADDRESSES, RepairRequestStatusType } from "~/utils/blockchain/config";
+import { statusMap } from "~/utils/repair-request";
 
 type LoaderData = {
   repairRequests: Array<{
@@ -77,7 +78,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 function BlockchainStatus({ requestId }: { requestId: string }) {
-  const { repairRequest, isLoading, isError } = useRepairRequestRead(BigInt(requestId));
+  const { data, isLoading, isError } = useRepairRequestRead(BigInt(requestId));
 
   if (isLoading) {
     return (
@@ -88,7 +89,7 @@ function BlockchainStatus({ requestId }: { requestId: string }) {
     );
   }
 
-  if (isError || !repairRequest) {
+  if (isError || !data) {
     return (
       <Badge variant="danger" className="text-red-400">
         <LinkIcon className="h-4 w-4 mr-1" />
@@ -97,20 +98,24 @@ function BlockchainStatus({ requestId }: { requestId: string }) {
     );
   }
 
-  const etherscanUrl = getEtherscanLink('address', CONTRACT_ADDRESSES.REPAIR_REQUEST);
+  const etherscanUrl = `https://sepolia.etherscan.io/address/${CONTRACT_ADDRESSES.REPAIR_REQUEST}`;
+  const status = statusMap[data.status as RepairRequestStatusType];
 
   return (
-    <Badge 
-      variant="success" 
-      className="text-green-400 cursor-pointer"
-      onClick={(e) => {
-        e.preventDefault(); // Prevent the parent Link from navigating
-        window.open(etherscanUrl, '_blank', 'noopener,noreferrer');
-      }}
-    >
-      <LinkIcon className="h-4 w-4 mr-1" />
-      On Chain
-    </Badge>
+    <div className="flex items-center gap-2">
+      <RepairStatus status={status} />
+      <Badge 
+        variant="success" 
+        className="text-green-400 cursor-pointer"
+        onClick={(e) => {
+          e.preventDefault(); // Prevent the parent Link from navigating
+          window.open(etherscanUrl, '_blank', 'noopener,noreferrer');
+        }}
+      >
+        <LinkIcon className="h-4 w-4 mr-1" />
+        On Chain
+      </Badge>
+    </div>
   );
 }
 
@@ -177,12 +182,10 @@ export default function RepairRequests() {
               variant="interactive"
               accent="purple"
               header={{
-                title: request.property.address,
-                subtitle: user.role === 'LANDLORD' ? `Submitted by ${request.initiator.name}` : undefined,
-                extra: <RepairStatus status={request.status} />
+                title: request.property.address
               }}
             >
-              <div className="p-4 space-y-3">
+              <div className="p-0 space-y-3">
                 <div>
                   <div className="text-sm font-medium text-white/50 mb-1">Description</div>
                   <p className="text-sm text-white/70 line-clamp-2">
@@ -196,12 +199,15 @@ export default function RepairRequests() {
                   </div>
                   <div>
                     <div className="text-sm font-medium text-white/50 mb-1">Status</div>
-                    <div className="flex items-center gap-2">
-                      <RepairStatus status={request.status} />
-                      <BlockchainStatus requestId={request.id} />
-                    </div>
+                    <BlockchainStatus requestId={request.id} />
                   </div>
                 </div>
+                {user.role === 'LANDLORD' && (
+                  <div>
+                    <div className="text-sm font-medium text-white/50 mb-1">Submitted By</div>
+                    <div className="text-sm text-white/70">{request.initiator.name}</div>
+                  </div>
+                )}
               </div>
             </Card>
           </Link>

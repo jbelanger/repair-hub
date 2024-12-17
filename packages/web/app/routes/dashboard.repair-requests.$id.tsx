@@ -9,13 +9,13 @@ import { useToast, ToastManager } from "~/components/ui/Toast";
 import { requireUser } from "~/utils/session.server";
 import { type Address, type HexString } from "~/utils/blockchain/types";
 import { hashToHexSync } from "~/utils/blockchain/hash.server";
-import { BlockchainEvent, statusMap, validateStatusTransition, validateWithdrawRequest } from "~/utils/repair-request";
+import { BlockchainEvent, statusMap, validateStatusTransition, validateWithdrawRequest, getValidTransitions } from "~/utils/repair-request";
 import { RepairRequestBlockchain } from "~/components/repair-request/RepairRequestBlockchain";
 import { RepairRequestDetails } from "~/components/repair-request/RepairRequestDetails";
 import { LandlordView } from "~/components/repair-request/LandlordView";
 import { TenantView } from "~/components/repair-request/TenantView";
 import { Switch } from "~/components/ui/Switch";
-import type { LoaderData, BlockchainRepairRequest } from "~/types/repair-request";
+import type { LoaderData } from "~/types/repair-request";
 import type { ContractError, ContractRepairRequest } from "~/utils/blockchain/types/repair-request";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Form } from "@remix-run/react";
@@ -24,6 +24,19 @@ import { usePublicClient } from 'wagmi'
 import { readRepairRequest } from '~/utils/blockchain/utils/contract-read'
 import { decodeEventLog } from 'viem'
 import { CONTRACT_ADDRESSES } from "~/utils/blockchain/config";
+import { useRepairRequestEvents } from "~/hooks/useRepairRequestEvents";
+import { createPublicClient, http } from 'viem'
+import { sepolia } from 'viem/chains'
+
+// Helper function to convert BigInt values to strings
+function serializeBlockchainData(data: ContractRepairRequest) {
+  return {
+    ...data,
+    id: data.id.toString(),
+    createdAt: data.createdAt.toString(),
+    updatedAt: data.updatedAt.toString(),
+  };
+}
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -33,6 +46,20 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
+  // Create a public client for server-side blockchain reads
+  const publicClient = createPublicClient({
+    chain: sepolia,
+    transport: http()
+  });
+
+  // Get blockchain state first
+  const blockchainResult = await readRepairRequest(publicClient, BigInt(id));
+  if (blockchainResult.isErr()) {
+    throw new Response("Failed to read blockchain state", { status: 500 });
+  }
+  const blockchainRequest = blockchainResult.value;
+
+  // Get metadata from database
   const repairRequest = await db.repairRequest.findUnique({
     where: { id },
     include: {
@@ -68,7 +95,10 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw redirect("/dashboard/repair-requests");
   }
 
-  return json<LoaderData>({
+  // Get valid status transitions based on blockchain status
+  const availableStatusUpdates = getValidTransitions(blockchainRequest.status);
+
+  return json({
     repairRequest: {
       ...repairRequest,
       createdAt: repairRequest.createdAt.toISOString(),
@@ -85,12 +115,14 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
         address: repairRequest.initiator.address as Address
       }
     },
+    blockchainRequest: serializeBlockchainData(blockchainRequest),
     user: {
       ...user,
       address: user.address as Address
     },
     isLandlord,
-    isTenant
+    isTenant,
+    availableStatusUpdates
   });
 }
 
@@ -103,6 +135,20 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return json({ error: "Repair request ID is required" }, { status: 400 });
     }
 
+    // Create a public client for server-side blockchain reads
+    const publicClient = createPublicClient({
+      chain: sepolia,
+      transport: http()
+    });
+
+    // Get blockchain state first
+    const blockchainResult = await readRepairRequest(publicClient, BigInt(id));
+    if (blockchainResult.isErr()) {
+      throw new Response("Failed to read blockchain state", { status: 500 });
+    }
+    const blockchainRequest = blockchainResult.value;
+
+    // Get metadata from database
     const repairRequest = await db.repairRequest.findUnique({
       where: { id },
       include: {
@@ -158,14 +204,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
         return json({ error: "Invalid status value" }, { status: 400 });
       }
 
-      const dbStatus = statusMap[numericStatus as RepairRequestStatusType];
-      if (!dbStatus) {
-        return json({ error: "Invalid status mapping" }, { status: 400 });
-      }
-
-      const validationError = validateStatusTransition(repairRequest.status, dbStatus);
-      if (validationError) {
-        return json({ error: validationError }, { status: 400 });
+      // Validate status transition using blockchain state
+      const validTransitions = getValidTransitions(blockchainRequest.status);
+      if (!validTransitions.includes(numericStatus)) {
+        return json({ error: "Invalid status transition" }, { status: 400 });
       }
 
       return json({ 
@@ -179,7 +221,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         return json({ error: "Only the tenant who created the request can withdraw it" }, { status: 403 });
       }
 
-      if (repairRequest.status !== "PENDING") {
+      // Check blockchain state for withdrawal
+      if (blockchainRequest.status !== RepairRequestStatusType.PENDING) {
         return json({ error: "Can only withdraw pending requests" }, { status: 400 });
       }
 
@@ -191,7 +234,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         return json({ error: "Only the tenant who created the request can approve/refuse work" }, { status: 403 });
       }
 
-      if (repairRequest.status !== "COMPLETED") {
+      // Check blockchain state for approval
+      if (blockchainRequest.status !== RepairRequestStatusType.COMPLETED) {
         return json({ error: "Can only approve/refuse completed work" }, { status: 400 });
       }
 
@@ -207,7 +251,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function RepairRequestPage() {
-  const { repairRequest, user, isLandlord, isTenant } = useLoaderData<typeof loader>();
+  const { repairRequest, blockchainRequest, user, isLandlord, isTenant, availableStatusUpdates } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
   const actionData = useActionData<{ 
     success?: boolean; 
@@ -224,15 +268,34 @@ export default function RepairRequestPage() {
   const [pendingAction, setPendingAction] = useState<{
     type: 'withdraw' | 'status' | 'workDetails';
     expectedValue?: string | number;
+    transactionId?: string;
   } | null>(null);
-  const [blockchainState, setBlockchainState] = useState({
-    request: null as ContractRepairRequest | null,
-    isLoading: false,
-    isError: false
-  });
   const mounted = useRef(true);
   const formDataRef = useRef<FormData | null>(null);
+  const lastProcessedActionRef = useRef<string | null>(null);
+  const [isRejected, setIsRejected] = useState(false);
   const publicClient = usePublicClient();
+
+  // Use the hook to get events
+  const { events } = useRepairRequestEvents(repairRequest.id);
+
+  // Reset form state when transaction is rejected
+  useEffect(() => {
+    if (isRejected) {
+      lastProcessedActionRef.current = null;
+      formDataRef.current = null;
+      setPendingAction(null);
+      setIsProcessing(false);
+      setIsRejected(false);
+    }
+  }, [isRejected]);
+
+  // Reset action handled ref when navigation state changes
+  useEffect(() => {
+    if (navigation.state === 'idle') {
+      lastProcessedActionRef.current = null;
+    }
+  }, [navigation.state]);
 
   // Watch for blockchain events
   useEffect(() => {
@@ -255,7 +318,8 @@ export default function RepairRequestPage() {
             });
             const args = decoded.args as any;
             
-            if (args.id.toString() === repairRequest.id) {
+            if (args.id.toString() === repairRequest.id && 
+                pendingAction?.transactionId) {
               const newStatus = Number(args.newStatus);
               if (mounted.current) {
                 switch (newStatus) {
@@ -314,7 +378,8 @@ export default function RepairRequestPage() {
               const args = decoded.args as any;
               
               if (args.id.toString() === repairRequest.id && 
-                  args.newHash === pendingAction.expectedValue) {
+                  args.newHash === pendingAction.expectedValue &&
+                  pendingAction.transactionId) {
                 if (mounted.current) {
                   addToast("Work details have been updated", "success", "Update Successful");
                   setPendingAction(null);
@@ -332,9 +397,9 @@ export default function RepairRequestPage() {
     return () => {
       unwatchCallbacks.forEach(unwatch => unwatch());
     };
-  }, [publicClient, isProcessing, pendingAction, repairRequest.id]);
+  }, [publicClient, isProcessing, pendingAction?.transactionId, repairRequest.id]);
 
-  const handleBlockchainTransaction = useCallback(async (
+const handleBlockchainTransaction = useCallback(async (
     action: string,
     formData: FormData,
     workDetailsHash?: HexString,
@@ -346,70 +411,72 @@ export default function RepairRequestPage() {
     try {
       if (!user.address) {
         setIsProcessing(false);
+        setPendingAction(null);
         return;
       }
 
       if (action === "withdrawRequest") {
-        const validationError = validateWithdrawRequest(repairRequest.status);
-        if (validationError) {
-          throw new Error(validationError);
-        }
-
-        const result = await withdrawRequest(BigInt(repairRequest.id));
+        const result = await withdrawRequest(BigInt(repairRequest.id), true); // Skip gas estimation
         if (!mounted.current) {
           setIsProcessing(false);
+          setPendingAction(null);
           return;
         }
 
         await result.match(
           async () => {
             if (!mounted.current) return;
-            setPendingAction({ type: 'withdraw' });
+            setPendingAction({ 
+              type: 'withdraw',
+              transactionId: Date.now().toString()
+            });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
-            throw new Error(error.message);
+            // Handle user rejection
+            if (error.message.toLowerCase().includes('user rejected') || 
+                error.message.toLowerCase().includes('user denied')) {
+              addToast("Transaction was rejected", "error", "Transaction Failed");
+              setIsRejected(true);
+              return;
+            }
+            throw error;
           }
         );
       } else if (action === "updateWorkDetails" && workDetailsHash) {
-        const result = await updateWorkDetails(BigInt(repairRequest.id), workDetailsHash);
+        const result = await updateWorkDetails(BigInt(repairRequest.id), workDetailsHash, true); // Skip gas estimation
         if (!mounted.current) {
           setIsProcessing(false);
+          setPendingAction(null);
           return;
         }
 
         await result.match(
           async () => {
             if (!mounted.current) return;
-            setPendingAction({ type: 'workDetails', expectedValue: workDetailsHash });
+            setPendingAction({ 
+              type: 'workDetails', 
+              expectedValue: workDetailsHash,
+              transactionId: Date.now().toString()
+            });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
-            throw new Error(error.message);
+            // Handle user rejection
+            if (error.message.toLowerCase().includes('user rejected') || 
+                error.message.toLowerCase().includes('user denied')) {
+              addToast("Transaction was rejected", "error", "Transaction Failed");
+              setIsRejected(true);
+              return;
+            }
+            throw error;
           }
         );
       } else if (action === "updateStatus" && statusValue !== undefined) {
-        const result = await updateStatus(BigInt(repairRequest.id), statusValue);
+        const result = await updateStatus(BigInt(repairRequest.id), statusValue, true); // Skip gas estimation
         if (!mounted.current) {
           setIsProcessing(false);
-          return;
-        }
-
-        await result.match(
-          async () => {
-            if (!mounted.current) return;
-            setPendingAction({ type: 'status', expectedValue: statusValue });
-          },
-          (error: ContractError) => {
-            if (!mounted.current) return;
-            throw new Error(error.message);
-          }
-        );
-      } else if (action === "approveWork") {
-        const isAccepted = formData.get("isAccepted") === "true";
-        const result = await approveWork(BigInt(repairRequest.id), isAccepted);
-        if (!mounted.current) {
-          setIsProcessing(false);
+          setPendingAction(null);
           return;
         }
 
@@ -418,162 +485,162 @@ export default function RepairRequestPage() {
             if (!mounted.current) return;
             setPendingAction({ 
               type: 'status', 
-              expectedValue: isAccepted ? RepairRequestStatusType.ACCEPTED : RepairRequestStatusType.REFUSED 
+              expectedValue: statusValue,
+              transactionId: Date.now().toString()
             });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
-            throw new Error(error.message);
+            // Handle user rejection
+            if (error.message.toLowerCase().includes('user rejected') || 
+                error.message.toLowerCase().includes('user denied')) {
+              addToast("Transaction was rejected", "error", "Transaction Failed");
+              setIsRejected(true);
+              return;
+            }
+            throw error;
+          }
+        );
+      } else if (action === "approveWork") {
+        const isAccepted = formData.get("isAccepted") === "true";
+        const result = await approveWork(BigInt(repairRequest.id), isAccepted, true); // Skip gas estimation
+        if (!mounted.current) {
+          setIsProcessing(false);
+          setPendingAction(null);
+          return;
+        }
+
+        await result.match(
+          async () => {
+            if (!mounted.current) return;
+            setPendingAction({ 
+              type: 'status', 
+              expectedValue: isAccepted ? RepairRequestStatusType.ACCEPTED : RepairRequestStatusType.REFUSED,
+              transactionId: Date.now().toString()
+            });
+          },
+          (error: ContractError) => {
+            if (!mounted.current) return;
+            // Handle user rejection
+            if (error.message.toLowerCase().includes('user rejected') || 
+                error.message.toLowerCase().includes('user denied')) {
+              addToast("Transaction was rejected", "error", "Transaction Failed");
+              setIsRejected(true);
+              return;
+            }
+            throw error;
           }
         );
       }
     } catch (error: any) {
       if (!mounted.current) return;
       addToast(error.message || "Failed to complete the transaction", "error", "Transaction Failed");
-      setPendingAction(null);
-    } finally {
-      if (mounted.current) {
-        setIsProcessing(false);
-      }
+      setIsRejected(true);
     }
   }, [addToast, withdrawRequest, updateWorkDetails, updateStatus, approveWork, isProcessing, repairRequest.id, user.address]);
 
-  useEffect(() => {
-    mounted.current = true;
+// Handle navigation form data
+useEffect(() => {
+  if (navigation.formData) {
+    formDataRef.current = navigation.formData;
+  }
+}, [navigation.formData]);
 
-    async function fetchData() {
-      if (!publicClient || !mounted.current) return;
-      setBlockchainState(prev => ({ ...prev, isLoading: true }));
+// Handle withdraw success navigation
+useEffect(() => {
+  if (withdrawSuccess) {
+    navigate("/dashboard/repair-requests", { replace: true });
+  }
+}, [withdrawSuccess, navigate]);
 
-      const result = await readRepairRequest(publicClient, BigInt(repairRequest.id));
-      
-      if (!mounted.current) return;
+// Handle action data and blockchain transactions
+useEffect(() => {
+  if (!actionData?.success || !mounted.current || isProcessing || !formDataRef.current) return;
 
-      result.match(
-        (data) => {
-          setBlockchainState(prev => ({
-            ...prev,
-            request: data,
-            isError: false,
-            isLoading: false
-          }));
-        },
-        () => {
-          setBlockchainState(prev => ({
-            ...prev,
-            isError: true,
-            isLoading: false
-          }));
-        }
-      );
-    }
+  const action = formDataRef.current.get("_action");
+  if (!action) return;
 
-    fetchData();
+  // Generate a unique transaction ID
+  const transactionId = `${action}-${Date.now()}`;
 
-    return () => {
-      mounted.current = false;
-      setIsProcessing(false);
-      setWithdrawSuccess(false);
-      setPendingAction(null);
-    };
-  }, [publicClient, repairRequest.id]);
+  // Only process if we haven't seen this transaction before
+  if (lastProcessedActionRef.current !== transactionId) {
+    lastProcessedActionRef.current = transactionId;
+    handleBlockchainTransaction(
+      action.toString(),
+      formDataRef.current,
+      actionData.workDetailsHash,
+      actionData.status
+    );
+  }
+}, [actionData?.success]);
 
-  // Handle navigation form data
-  useEffect(() => {
-    if (navigation.formData) {
-      formDataRef.current = navigation.formData;
-    }
-  }, [navigation.formData]);
-
-  // Handle withdraw success navigation
-  useEffect(() => {
-    if (withdrawSuccess) {
-      navigate("/dashboard/repair-requests", { replace: true });
-    }
-  }, [withdrawSuccess, navigate]);
-
-  // Handle action data and blockchain transactions
-  useEffect(() => {
-    if (!actionData || !mounted.current) return;
-
-    if (actionData.error) {
-      addToast(actionData.error, "error", "Action Failed");
-      return;
-    }
-
-    if (actionData.success && !isProcessing && formDataRef.current) {
-      const action = formDataRef.current.get("_action");
-      if (!action) return;
-
-      handleBlockchainTransaction(
-        action.toString(),
-        formDataRef.current,
-        actionData.workDetailsHash,
-        actionData.status
-      );
-    }
-  }, [actionData, isProcessing, handleBlockchainTransaction, addToast]);
-
-  const transformedBlockchainRequest: BlockchainRepairRequest | null = blockchainState.request ? {
-    descriptionHash: blockchainState.request.descriptionHash,
-    workDetailsHash: blockchainState.request.workDetailsHash,
-    initiator: blockchainState.request.initiator,
-    createdAt: blockchainState.request.createdAt,
-    updatedAt: blockchainState.request.updatedAt,
-  } : null;
-
-  return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <PageHeader
-          title="Repair Request Details"
-          subtitle="View and manage repair request information"
-          backTo="/dashboard/repair-requests"
+return (
+  <div className="p-6 space-y-6">
+    <div className="flex justify-between items-center">
+      <PageHeader
+        title="Repair Request Details"
+        subtitle="View and manage repair request information"
+        backTo="/dashboard/repair-requests"
+      />
+      {isLandlord && isTenant && (
+        <Switch
+          checked={showLandlordView}
+          onChange={setShowLandlordView}
+          leftLabel="Tenant View"
+          rightLabel="Landlord View"
+          className="ml-4"
         />
-        {isLandlord && isTenant && (
-          <Switch
-            checked={showLandlordView}
-            onChange={setShowLandlordView}
-            leftLabel="Tenant View"
-            rightLabel="Landlord View"
-            className="ml-4"
+      )}
+    </div>
+
+    <div className="grid gap-6 lg:grid-cols-3">
+      <div className="lg:col-span-2 space-y-6">
+        {showLandlordView ? (
+          <LandlordView
+            repairRequest={repairRequest}
+            blockchainRequest={blockchainRequest}
+            availableStatusUpdates={availableStatusUpdates}
+            isPending={isPending || isProcessing || !!pendingAction}
+            addToast={addToast}
+          />
+        ) : (
+          <TenantView
+            repairRequest={repairRequest}
+            blockchainRequest={blockchainRequest}
+            isPending={isPending || isProcessing || !!pendingAction}
+            availableStatusUpdates={availableStatusUpdates}
+            isTenant={isTenant}
           />
         )}
-      </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
-          {showLandlordView ? (
-            <LandlordView
-              repairRequest={repairRequest}
-              isPending={isPending || isProcessing}
-              addToast={addToast}
-            />
-          ) : (
-            <TenantView
-              repairRequest={repairRequest}
-              isPending={isPending || isProcessing}
-              isTenant={isTenant}
-            />
-          )}
-
-          <RepairRequestBlockchain
-            isLoading={blockchainState.isLoading}
-            isError={blockchainState.isError}
-            blockchainRequest={transformedBlockchainRequest}
-            events={[]}
-          />
-        </div>
-
-        <RepairRequestDetails
-          property={repairRequest.property}
-          initiator={repairRequest.initiator}
-          createdAt={repairRequest.createdAt}
-          updatedAt={repairRequest.updatedAt}
+        <RepairRequestBlockchain
+          isLoading={false}
+          isError={false}
+          blockchainRequest={{
+            descriptionHash: blockchainRequest.descriptionHash,
+            workDetailsHash: blockchainRequest.workDetailsHash,
+            initiator: blockchainRequest.initiator,
+            createdAt: blockchainRequest.createdAt,
+            updatedAt: blockchainRequest.updatedAt,
+          }}
+          events={events}
         />
       </div>
 
-      <ToastManager toasts={toasts} removeToast={removeToast} />
+      <RepairRequestDetails
+        property={repairRequest.property}
+        initiator={repairRequest.initiator}
+        createdAt={repairRequest.createdAt}
+        updatedAt={repairRequest.updatedAt}
+      />
     </div>
-  );
+
+    <ToastManager toasts={toasts} removeToast={removeToast} />
+  </div>
+);
 }
+
+
+
+

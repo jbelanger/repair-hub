@@ -7,7 +7,9 @@ import {
   ContractError, 
   BlockchainRepairRequestResult,
   DecodedEventArgs,
-  ContractRepairRequest
+  ContractRepairRequest,
+  ContractFunctionName,
+  ContractFunctionArgs
 } from '../types/repair-request'
 import { 
   waitForTransaction,
@@ -17,13 +19,23 @@ import {
 } from '../utils/contract-interactions'
 import { parseContractError } from '../utils/contract-errors'
 import { decodeEventLog, type TransactionReceipt } from 'viem'
+import { readRepairRequest } from '../utils/contract-read'
 
 export function useRepairRequest() {
   const { writeContractAsync, isPending, isSuccess, error } = useWriteContract()
   const publicClient = usePublicClient()
-  const { isConnected } = useAccount()
+  const { isConnected, address } = useAccount()
 
-  const checkRateLimitAndClient = async () => {
+  // Simple helper to handle common contract write setup
+  const prepareContractWrite = async <T extends ContractFunctionName>(
+    functionName: T,
+    args: ContractFunctionArgs[T],
+    skipGasEstimation = false
+  ) => {
+    if (!isConnected) {
+      throw new Error('Please connect your wallet to continue');
+    }
+
     if (!publicClient) {
       throw new Error('Public client not available');
     }
@@ -37,29 +49,37 @@ export function useRepairRequest() {
       }
       throw error;
     }
-    return publicClient;
+
+    // Always estimate gas
+    const gasLimitResult = await estimateGas(publicClient, functionName, args);
+    if (gasLimitResult.isErr()) {
+      throw new Error('Failed to estimate gas: ' + gasLimitResult.error.message);
+    }
+    const gasLimit = gasLimitResult.value;
+
+    return { client: publicClient, gasLimit };
   };
 
   const createRepairRequest = async (
     propertyId: HexString,
     descriptionHash: HexString,
-    landlord: Address
+    landlord: Address,
+    skipGasEstimation: boolean = false
   ): Promise<ResultAsync<BlockchainRepairRequestResult, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
-        if (!isConnected) {
-          throw new Error('Please connect your wallet to continue');
-        }
-
-        const client = await checkRateLimitAndClient();
-        const gasLimitResult = await estimateGas(client, 'createRepairRequest', [propertyId, descriptionHash, landlord]);
-        const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
+        const args = [propertyId, descriptionHash, landlord] as const;
+        const { client, gasLimit } = await prepareContractWrite(
+          'createRepairRequest',
+          args,
+          skipGasEstimation
+        );
 
         const hash = await writeContractAsync({
           address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
           abi: RepairRequestContractABI,
           functionName: 'createRepairRequest',
-          args: [propertyId, descriptionHash, landlord],
+          args,
           ...getDefaultTransactionOptions(gasLimit)
         });
 
@@ -107,23 +127,23 @@ export function useRepairRequest() {
 
   const updateStatus = async (
     requestId: bigint,
-    status: RepairRequestStatusType
+    status: RepairRequestStatusType,
+    skipGasEstimation: boolean = false
   ): Promise<ResultAsync<TransactionReceipt, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
-        if (!isConnected) {
-          throw new Error('Please connect your wallet to continue');
-        }
-
-        const client = await checkRateLimitAndClient();
-        const gasLimitResult = await estimateGas(client, 'updateRepairRequestStatus', [requestId, BigInt(status)]);
-        const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
+        const args = [requestId, BigInt(status)] as const;
+        const { client, gasLimit } = await prepareContractWrite(
+          'updateRepairRequestStatus',
+          args,
+          skipGasEstimation
+        );
 
         const hash = await writeContractAsync({
           address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
           abi: RepairRequestContractABI,
           functionName: 'updateRepairRequestStatus',
-          args: [requestId, BigInt(status)],
+          args,
           ...getDefaultTransactionOptions(gasLimit)
         });
 
@@ -139,23 +159,23 @@ export function useRepairRequest() {
 
   const updateWorkDetails = async (
     requestId: bigint,
-    workDetailsHash: HexString
+    workDetailsHash: HexString,
+    skipGasEstimation: boolean = false
   ): Promise<ResultAsync<TransactionReceipt, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
-        if (!isConnected) {
-          throw new Error('Please connect your wallet to continue');
-        }
-
-        const client = await checkRateLimitAndClient();
-        const gasLimitResult = await estimateGas(client, 'updateWorkDetails', [requestId, workDetailsHash]);
-        const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
+        const args = [requestId, workDetailsHash] as const;
+        const { client, gasLimit } = await prepareContractWrite(
+          'updateWorkDetails',
+          args,
+          skipGasEstimation
+        );
 
         const hash = await writeContractAsync({
           address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
           abi: RepairRequestContractABI,
           functionName: 'updateWorkDetails',
-          args: [requestId, workDetailsHash],
+          args,
           ...getDefaultTransactionOptions(gasLimit)
         });
 
@@ -170,23 +190,48 @@ export function useRepairRequest() {
   };
 
   const withdrawRequest = async (
-    requestId: bigint
+    requestId: bigint,
+    skipGasEstimation: boolean = false
   ): Promise<ResultAsync<TransactionReceipt, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
-        if (!isConnected) {
-          throw new Error('Please connect your wallet to continue');
+        if (!publicClient || !address) {
+          throw new Error('Client or wallet not available');
         }
 
-        const client = await checkRateLimitAndClient();
-        const gasLimitResult = await estimateGas(client, 'withdrawRepairRequest', [requestId]);
-        const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
+        // Check request state before attempting withdrawal
+        const requestResult = await readRepairRequest(publicClient, requestId);
+        if (requestResult.isErr()) {
+          throw new Error('Failed to read request state: ' + requestResult.error.message);
+        }
+
+        const request = requestResult.value;
+
+        // Validate conditions that match contract modifiers
+        if (request.initiator.toLowerCase() !== address.toLowerCase()) {
+          throw new Error('Only the tenant can withdraw the request');
+        }
+
+        if (request.status === RepairRequestStatusType.CANCELLED) {
+          throw new Error('Request is already cancelled');
+        }
+
+        if (request.status !== RepairRequestStatusType.PENDING) {
+          throw new Error('Can only withdraw pending requests');
+        }
+
+        const args = [requestId] as const;
+        const { client, gasLimit } = await prepareContractWrite(
+          'withdrawRepairRequest',
+          args,
+          skipGasEstimation
+        );
 
         const hash = await writeContractAsync({
           address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
           abi: RepairRequestContractABI,
           functionName: 'withdrawRepairRequest',
-          args: [requestId],
+          args,
           ...getDefaultTransactionOptions(gasLimit)
         });
 
@@ -202,23 +247,23 @@ export function useRepairRequest() {
 
   const approveWork = async (
     requestId: bigint,
-    isAccepted: boolean
+    isAccepted: boolean,
+    skipGasEstimation: boolean = false
   ): Promise<ResultAsync<TransactionReceipt, ContractError>> => {
     return ResultAsync.fromPromise(
       (async () => {
-        if (!isConnected) {
-          throw new Error('Please connect your wallet to continue');
-        }
-
-        const client = await checkRateLimitAndClient();
-        const gasLimitResult = await estimateGas(client, 'approveWork', [requestId, isAccepted]);
-        const gasLimit = gasLimitResult.isOk() ? gasLimitResult.value : 500000n;
+        const args = [requestId, isAccepted] as const;
+        const { client, gasLimit } = await prepareContractWrite(
+          'approveWork',
+          args,
+          skipGasEstimation
+        );
 
         const hash = await writeContractAsync({
           address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
           abi: RepairRequestContractABI,
           functionName: 'approveWork',
-          args: [requestId, isAccepted],
+          args,
           ...getDefaultTransactionOptions(gasLimit)
         });
 
