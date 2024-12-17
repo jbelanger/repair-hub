@@ -4,6 +4,7 @@ import { Card } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
 import { TextArea } from "~/components/ui/TextArea";
 import { FormField } from "~/components/ui/Form";
+import type { ReactNode } from "react";
 
 interface Props {
   workDetails: string;
@@ -11,6 +12,7 @@ interface Props {
   isEditable?: boolean;
   onWorkDetailsChange?: (value: string) => void;
   originalWorkDetails?: string;
+  children?: ReactNode;
 }
 
 export function RepairRequestWorkDetails({
@@ -19,6 +21,7 @@ export function RepairRequestWorkDetails({
   isEditable = false,
   onWorkDetailsChange,
   originalWorkDetails,
+  children,
 }: Props) {
   if (!isEditable) {
     return (
@@ -79,6 +82,7 @@ export function RepairRequestWorkDetails({
                 Update Work Details
               </Button>
             )}
+            {children}
           </div>
         </Form>
       </div>

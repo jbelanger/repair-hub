@@ -1,12 +1,12 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useActionData, useNavigate, useNavigation, useLoaderData, useSubmit } from "@remix-run/react";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
 import { db } from "~/utils/db.server";
-import { useRepairRequest, useWatchRepairRequestEvents } from "~/utils/blockchain/hooks/useRepairRequest";
+import { useRepairRequest } from "~/utils/blockchain/hooks/useRepairRequest";
 import { Building2, AlertTriangle, FileText } from 'lucide-react';
 import { Select } from "~/components/ui/Select";
 import { TextArea } from "~/components/ui/TextArea";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { requireUser } from "~/utils/session.server";
 import { cn } from "~/utils/cn";
 import { PageHeader } from "~/components/ui/PageHeader";
@@ -17,6 +17,9 @@ import { useToast, ToastManager } from "~/components/ui/Toast";
 import { Skeleton } from "~/components/ui/LoadingState";
 import { type Address, type HexString, toHexString, hashToHex } from "~/utils/blockchain/types";
 import { hashToHexSync } from "~/utils/blockchain/hash.server";
+import { RepairRequestContractABI } from "~/utils/blockchain/abis/RepairRequestContract";
+import { CONTRACT_ADDRESSES } from "~/utils/blockchain/config";
+import { decodeEventLog } from 'viem';
 
 type ActionData = {
   success?: boolean;
@@ -230,40 +233,73 @@ export default function CreateRepairRequest() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
   const isSubmitting = navigation.state === "submitting";
+  const publicClient = usePublicClient();
+  const mounted = useRef(true);
 
-  // Watch for blockchain events
-  useWatchRepairRequestEvents({
-    onCreated: async (id, initiator, propertyId, descriptionHash, createdAt) => {
-      if (isWaitingForEvent && initiator.toLowerCase() === user.address.toLowerCase()) {
-        try {
-          const formData = new FormData();
-          formData.append("_stage", "create");
-          formData.append("propertyId", actionData?.fields?.propertyId || "");
-          formData.append("description", actionData?.fields?.description || "");
-          formData.append("urgency", actionData?.fields?.urgency || "");
-          formData.append("blockchainId", id.toString());
-          
-          submit(formData, { method: "post" });
-          setIsWaitingForEvent(false);
-          addToast(
-            "Your repair request has been successfully created on the blockchain",
-            "success",
-            "Blockchain Transaction Confirmed"
-          );
-        } catch (error) {
-          console.error("Database error:", error);
-          const errorMessage = error instanceof Error ? error.message : "Failed to save repair request to database";
-          setBlockchainError(errorMessage);
-          setIsWaitingForEvent(false);
-          addToast(
-            errorMessage,
-            "error",
-            "Database Error"
-          );
-        }
+  useEffect(() => {
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!publicClient || !isWaitingForEvent || !mounted.current) return;
+
+    const unwatch = publicClient.watchContractEvent({
+      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
+      abi: RepairRequestContractABI,
+      eventName: 'RepairRequestCreated',
+      onLogs: (logs) => {
+        logs.forEach(log => {
+          try {
+            const decoded = decodeEventLog({
+              abi: RepairRequestContractABI,
+              data: log.data,
+              topics: log.topics
+            });
+            const args = decoded.args as any;
+            
+            if (args.initiator.toLowerCase() === user.address.toLowerCase()) {
+              if (mounted.current) {
+                try {
+                  const formData = new FormData();
+                  formData.append("_stage", "create");
+                  formData.append("propertyId", actionData?.fields?.propertyId || "");
+                  formData.append("description", actionData?.fields?.description || "");
+                  formData.append("urgency", actionData?.fields?.urgency || "");
+                  formData.append("blockchainId", args.id.toString());
+                  
+                  submit(formData, { method: "post" });
+                  setIsWaitingForEvent(false);
+                  addToast(
+                    "Your repair request has been successfully created on the blockchain",
+                    "success",
+                    "Blockchain Transaction Confirmed"
+                  );
+                } catch (error) {
+                  console.error("Database error:", error);
+                  const errorMessage = error instanceof Error ? error.message : "Failed to save repair request to database";
+                  setBlockchainError(errorMessage);
+                  setIsWaitingForEvent(false);
+                  addToast(
+                    errorMessage,
+                    "error",
+                    "Database Error"
+                  );
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Error handling create event:', error);
+          }
+        });
       }
-    },
-  });
+    });
+
+    return () => {
+      unwatch();
+    };
+  }, [publicClient, isWaitingForEvent, user.address]);
 
   // Handle blockchain creation
   const handleCreateOnChain = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -286,12 +322,28 @@ export default function CreateRepairRequest() {
         // Use the async browser-side hash function for client-side operations
         const descriptionHash = await hashToHex(description);
         const blockchainPropertyId = toHexString(propertyId);
-        await createRepairRequest(blockchainPropertyId, descriptionHash, selectedProperty.landlordAddress);
+        const result = await createRepairRequest(blockchainPropertyId, descriptionHash, selectedProperty.landlordAddress);
+        
+        // Check if the transaction was rejected
+        if (result.isErr()) {
+          const error = result.error;
+          if (error.message.toLowerCase().includes('user rejected') || 
+              error.message.toLowerCase().includes('user denied')) {
+            setIsWaitingForEvent(false); // Reset the waiting state
+            addToast(
+              "Transaction was rejected",
+              "error",
+              "Transaction Failed"
+            );
+            return; // Exit early without throwing
+          }
+          throw error; // Throw other errors
+        }
       } catch (error) {
         console.error("Blockchain error:", error);
         const errorMessage = error instanceof Error ? error.message : "Failed to create repair request on blockchain";
         setBlockchainError(errorMessage);
-        setIsWaitingForEvent(false);
+        setIsWaitingForEvent(false); // Reset the waiting state
         addToast(
           errorMessage,
           "error",

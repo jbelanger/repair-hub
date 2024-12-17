@@ -1,7 +1,6 @@
 import { ArrowLeft, type LucideIcon } from "lucide-react";
 import { Button } from "./Button";
 import { Link } from "@remix-run/react";
-import type { ReactNode } from "react";
 
 interface PageHeaderProps {
   title: string;
@@ -13,10 +12,9 @@ interface PageHeaderProps {
     href?: string;
     onClick?: () => void;
   };
-  actions?: ReactNode;
 }
 
-export function PageHeader({ title, subtitle, backTo, action, actions }: PageHeaderProps) {
+export function PageHeader({ title, subtitle, backTo, action }: PageHeaderProps) {
   return (
     <div className="flex items-center justify-between mb-8">
       <div className="flex items-center gap-4">
@@ -38,9 +36,7 @@ export function PageHeader({ title, subtitle, backTo, action, actions }: PageHea
           )}
         </div>
       </div>
-      {actions ? (
-        actions
-      ) : action && (
+      {action && (
         action.href ? (
           <Link
             to={action.href}

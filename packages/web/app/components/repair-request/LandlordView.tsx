@@ -3,16 +3,25 @@ import { useActionData, useNavigation, Form } from "@remix-run/react";
 import { RepairRequestWorkDetails } from "./RepairRequestWorkDetails";
 import { RepairRequestDescription } from "./RepairRequestDescription";
 import { Button } from "~/components/ui/Button";
+import { Spinner } from "~/components/ui/Spinner";
 import { RepairRequestStatusType } from "~/utils/blockchain/config";
 import type { LoaderData } from "~/types/repair-request";
-import type { ContractRepairRequest } from "~/utils/blockchain/types/repair-request";
+import type { SerializedContractRepairRequest } from "~/utils/blockchain/types/repair-request";
 import { statusMap } from "~/utils/repair-request";
+
+type PendingAction = {
+  type: 'withdraw' | 'status' | 'workDetails';
+  expectedValue?: string | number;
+  transactionId?: string;
+  description?: string;
+};
 
 type LandlordViewProps = {
   repairRequest: LoaderData['repairRequest'];
-  blockchainRequest: ContractRepairRequest;
+  blockchainRequest: SerializedContractRepairRequest;
   availableStatusUpdates?: RepairRequestStatusType[];
   isPending: boolean;
+  pendingAction: PendingAction | null;
   addToast: (message: string, type?: "success" | "error", title?: string) => void;
   children?: ReactNode;
 };
@@ -22,6 +31,7 @@ export function LandlordView({
   blockchainRequest,
   availableStatusUpdates = [],
   isPending,
+  pendingAction,
   addToast,
   children,
 }: LandlordViewProps) {
@@ -82,6 +92,9 @@ export function LandlordView({
 
     if (!label) return null;
 
+    const isUpdatingThisStatus = pendingAction?.type === 'status' && 
+                                pendingAction.expectedValue === status;
+
     return (
       <Form method="post" key={status} className="inline">
         <input type="hidden" name="_action" value="updateStatus" />
@@ -91,7 +104,14 @@ export function LandlordView({
           variant={variant}
           disabled={isPending || isSubmitting}
         >
-          {label}
+          {isUpdatingThisStatus ? (
+            <div className="flex items-center gap-2">
+              <Spinner size="sm" />
+              <span>{pendingAction.description || 'Updating status...'}</span>
+            </div>
+          ) : (
+            label
+          )}
         </Button>
       </Form>
     );
@@ -115,7 +135,16 @@ export function LandlordView({
         isPending={isPending || isSubmitting}
         isEditable={true}
         onWorkDetailsChange={setWorkDetailsInput}
-      />
+      >
+        {pendingAction?.type === 'workDetails' && (
+          <div className="flex items-center gap-2 mt-2">
+            <Spinner size="sm" />
+            <span className="text-sm text-white/70">
+              {pendingAction.description || 'Updating work details...'}
+            </span>
+          </div>
+        )}
+      </RepairRequestWorkDetails>
     </>
   );
 }

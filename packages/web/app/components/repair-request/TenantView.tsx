@@ -6,6 +6,14 @@ import { RepairRequestStatusType } from "~/utils/blockchain/config";
 import type { LoaderData } from "~/types/repair-request";
 import type { SerializedContractRepairRequest } from "~/utils/blockchain/types/repair-request";
 import { statusMap } from "~/utils/repair-request";
+import { Spinner } from "~/components/ui/Spinner";
+
+type PendingAction = {
+  type: 'withdraw' | 'status' | 'workDetails';
+  expectedValue?: string | number;
+  transactionId?: string;
+  description?: string;
+};
 
 type TenantViewProps = {
   repairRequest: LoaderData['repairRequest'];
@@ -13,6 +21,7 @@ type TenantViewProps = {
   availableStatusUpdates?: RepairRequestStatusType[];
   isPending: boolean;
   isTenant: boolean;
+  pendingAction: PendingAction | null;
 };
 
 export function TenantView({
@@ -21,6 +30,7 @@ export function TenantView({
   availableStatusUpdates = [],
   isPending,
   isTenant,
+  pendingAction,
 }: TenantViewProps) {
   // Generate tenant action buttons based on blockchain status
   const tenantButtons = [];
@@ -35,7 +45,14 @@ export function TenantView({
           variant="danger"
           disabled={isPending}
         >
-          Withdraw Request
+          {pendingAction?.type === 'withdraw' ? (
+            <div className="flex items-center gap-2">
+              <Spinner size="sm" />
+              <span>{pendingAction.description || 'Withdrawing...'}</span>
+            </div>
+          ) : (
+            'Withdraw Request'
+          )}
         </Button>
       </Form>
     );
@@ -55,7 +72,14 @@ export function TenantView({
               variant="primary"
               disabled={isPending}
             >
-              Accept
+              {pendingAction?.type === 'status' && pendingAction.expectedValue === RepairRequestStatusType.ACCEPTED ? (
+                <div className="flex items-center gap-2">
+                  <Spinner size="sm" />
+                  <span>{pendingAction.description || 'Accepting...'}</span>
+                </div>
+              ) : (
+                'Accept'
+              )}
             </Button>
           </Form>
           <Form method="post">
@@ -66,7 +90,14 @@ export function TenantView({
               variant="danger"
               disabled={isPending}
             >
-              Refuse
+              {pendingAction?.type === 'status' && pendingAction.expectedValue === RepairRequestStatusType.REFUSED ? (
+                <div className="flex items-center gap-2">
+                  <Spinner size="sm" />
+                  <span>{pendingAction.description || 'Refusing...'}</span>
+                </div>
+              ) : (
+                'Refuse'
+              )}
             </Button>
           </Form>
         </div>

@@ -1,5 +1,5 @@
 import { json, redirect, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, useActionData, useNavigation, useNavigate } from "@remix-run/react";
+import { useLoaderData, useActionData, useNavigation, useNavigate, useRevalidator } from "@remix-run/react";
 import { db } from "~/utils/db.server";
 import { useRepairRequest } from "~/utils/blockchain/hooks/useRepairRequest";
 import { RepairRequestContractABI } from "~/utils/blockchain/abis/RepairRequestContract";
@@ -16,7 +16,7 @@ import { LandlordView } from "~/components/repair-request/LandlordView";
 import { TenantView } from "~/components/repair-request/TenantView";
 import { Switch } from "~/components/ui/Switch";
 import type { LoaderData } from "~/types/repair-request";
-import type { ContractError, ContractRepairRequest } from "~/utils/blockchain/types/repair-request";
+import type { ContractError, ContractRepairRequest, SerializedContractRepairRequest } from "~/utils/blockchain/types/repair-request";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Form } from "@remix-run/react";
 import { ResultAsync } from "neverthrow";
@@ -29,7 +29,7 @@ import { createPublicClient, http } from 'viem'
 import { sepolia } from 'viem/chains'
 
 // Helper function to convert BigInt values to strings
-function serializeBlockchainData(data: ContractRepairRequest) {
+function serializeBlockchainData(data: ContractRepairRequest): SerializedContractRepairRequest {
   return {
     ...data,
     id: data.id.toString(),
@@ -37,6 +37,12 @@ function serializeBlockchainData(data: ContractRepairRequest) {
     updatedAt: data.updatedAt.toString(),
   };
 }
+
+// Helper function to convert string to bigint
+function toBigInt(value: string | number): bigint {
+  return BigInt(value.toString());
+}
+
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -253,6 +259,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 export default function RepairRequestPage() {
   const { repairRequest, blockchainRequest, user, isLandlord, isTenant, availableStatusUpdates } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
   const actionData = useActionData<{ 
     success?: boolean; 
     error?: string; 
@@ -269,6 +276,7 @@ export default function RepairRequestPage() {
     type: 'withdraw' | 'status' | 'workDetails';
     expectedValue?: string | number;
     transactionId?: string;
+    description?: string;
   } | null>(null);
   const mounted = useRef(true);
   const formDataRef = useRef<FormData | null>(null);
@@ -330,26 +338,32 @@ export default function RepairRequestPage() {
                   case RepairRequestStatusType.ACCEPTED:
                     addToast("Work has been approved", "success", "Update Successful");
                     setPendingAction(null);
+                    revalidator.revalidate();
                     break;
                   case RepairRequestStatusType.REFUSED:
                     addToast("Work has been refused", "success", "Update Successful");
                     setPendingAction(null);
+                    revalidator.revalidate();
                     break;
                   case RepairRequestStatusType.REJECTED:
                     addToast("Request has been rejected", "success", "Update Successful");
                     setPendingAction(null);
+                    revalidator.revalidate();
                     break;
                   case RepairRequestStatusType.IN_PROGRESS:
                     addToast("Work has started", "success", "Update Successful");
                     setPendingAction(null);
+                    revalidator.revalidate();
                     break;
                   case RepairRequestStatusType.COMPLETED:
                     addToast("Work has been completed", "success", "Update Successful");
                     setPendingAction(null);
+                    revalidator.revalidate();
                     break;
                   default:
                     addToast("Status has been updated", "success", "Update Successful");
                     setPendingAction(null);
+                    revalidator.revalidate();
                 }
               }
             }
@@ -383,6 +397,7 @@ export default function RepairRequestPage() {
                 if (mounted.current) {
                   addToast("Work details have been updated", "success", "Update Successful");
                   setPendingAction(null);
+                  revalidator.revalidate();
                 }
               }
             } catch (error) {
@@ -416,7 +431,7 @@ const handleBlockchainTransaction = useCallback(async (
       }
 
       if (action === "withdrawRequest") {
-        const result = await withdrawRequest(BigInt(repairRequest.id), true); // Skip gas estimation
+        const result = await withdrawRequest(toBigInt(repairRequest.id), true);
         if (!mounted.current) {
           setIsProcessing(false);
           setPendingAction(null);
@@ -428,12 +443,12 @@ const handleBlockchainTransaction = useCallback(async (
             if (!mounted.current) return;
             setPendingAction({ 
               type: 'withdraw',
-              transactionId: Date.now().toString()
+              transactionId: Date.now().toString(),
+              description: 'Withdrawing request...'
             });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
-            // Handle user rejection
             if (error.message.toLowerCase().includes('user rejected') || 
                 error.message.toLowerCase().includes('user denied')) {
               addToast("Transaction was rejected", "error", "Transaction Failed");
@@ -444,7 +459,7 @@ const handleBlockchainTransaction = useCallback(async (
           }
         );
       } else if (action === "updateWorkDetails" && workDetailsHash) {
-        const result = await updateWorkDetails(BigInt(repairRequest.id), workDetailsHash, true); // Skip gas estimation
+        const result = await updateWorkDetails(toBigInt(repairRequest.id), workDetailsHash, true);
         if (!mounted.current) {
           setIsProcessing(false);
           setPendingAction(null);
@@ -457,12 +472,12 @@ const handleBlockchainTransaction = useCallback(async (
             setPendingAction({ 
               type: 'workDetails', 
               expectedValue: workDetailsHash,
-              transactionId: Date.now().toString()
+              transactionId: Date.now().toString(),
+              description: 'Updating work details...'
             });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
-            // Handle user rejection
             if (error.message.toLowerCase().includes('user rejected') || 
                 error.message.toLowerCase().includes('user denied')) {
               addToast("Transaction was rejected", "error", "Transaction Failed");
@@ -473,7 +488,7 @@ const handleBlockchainTransaction = useCallback(async (
           }
         );
       } else if (action === "updateStatus" && statusValue !== undefined) {
-        const result = await updateStatus(BigInt(repairRequest.id), statusValue, true); // Skip gas estimation
+        const result = await updateStatus(toBigInt(repairRequest.id), statusValue, true);
         if (!mounted.current) {
           setIsProcessing(false);
           setPendingAction(null);
@@ -486,12 +501,12 @@ const handleBlockchainTransaction = useCallback(async (
             setPendingAction({ 
               type: 'status', 
               expectedValue: statusValue,
-              transactionId: Date.now().toString()
+              transactionId: Date.now().toString(),
+              description: 'Updating status...'
             });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
-            // Handle user rejection
             if (error.message.toLowerCase().includes('user rejected') || 
                 error.message.toLowerCase().includes('user denied')) {
               addToast("Transaction was rejected", "error", "Transaction Failed");
@@ -503,7 +518,7 @@ const handleBlockchainTransaction = useCallback(async (
         );
       } else if (action === "approveWork") {
         const isAccepted = formData.get("isAccepted") === "true";
-        const result = await approveWork(BigInt(repairRequest.id), isAccepted, true); // Skip gas estimation
+        const result = await approveWork(toBigInt(repairRequest.id), isAccepted, true);
         if (!mounted.current) {
           setIsProcessing(false);
           setPendingAction(null);
@@ -516,12 +531,12 @@ const handleBlockchainTransaction = useCallback(async (
             setPendingAction({ 
               type: 'status', 
               expectedValue: isAccepted ? RepairRequestStatusType.ACCEPTED : RepairRequestStatusType.REFUSED,
-              transactionId: Date.now().toString()
+              transactionId: Date.now().toString(),
+              description: isAccepted ? 'Approving work...' : 'Refusing work...'
             });
           },
           (error: ContractError) => {
             if (!mounted.current) return;
-            // Handle user rejection
             if (error.message.toLowerCase().includes('user rejected') || 
                 error.message.toLowerCase().includes('user denied')) {
               addToast("Transaction was rejected", "error", "Transaction Failed");
@@ -602,6 +617,7 @@ return (
             blockchainRequest={blockchainRequest}
             availableStatusUpdates={availableStatusUpdates}
             isPending={isPending || isProcessing || !!pendingAction}
+            pendingAction={pendingAction}
             addToast={addToast}
           />
         ) : (
@@ -609,6 +625,7 @@ return (
             repairRequest={repairRequest}
             blockchainRequest={blockchainRequest}
             isPending={isPending || isProcessing || !!pendingAction}
+            pendingAction={pendingAction}
             availableStatusUpdates={availableStatusUpdates}
             isTenant={isTenant}
           />
@@ -621,8 +638,8 @@ return (
             descriptionHash: blockchainRequest.descriptionHash,
             workDetailsHash: blockchainRequest.workDetailsHash,
             initiator: blockchainRequest.initiator,
-            createdAt: blockchainRequest.createdAt,
-            updatedAt: blockchainRequest.updatedAt,
+            createdAt: toBigInt(blockchainRequest.createdAt),
+            updatedAt: toBigInt(blockchainRequest.updatedAt),
           }}
           events={events}
         />
@@ -640,7 +657,3 @@ return (
   </div>
 );
 }
-
-
-
-

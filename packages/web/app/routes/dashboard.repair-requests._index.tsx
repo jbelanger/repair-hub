@@ -38,6 +38,7 @@ type LoaderData = {
     address: string;
     name: string;
   };
+  hasProperties: boolean;
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -71,9 +72,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
     },
   });
 
+  // Check if tenant has any properties they can create requests for
+  const hasProperties = user.role === 'TENANT' ? await db.property.count({
+    where: {
+      tenantLeases: {
+        some: {
+          tenantId: user.id,
+          status: "ACTIVE"
+        }
+      }
+    }
+  }) > 0 : false;
+
   return json<LoaderData>({ 
     repairRequests,
-    user
+    user,
+    hasProperties
   });
 }
 
@@ -120,7 +134,7 @@ function BlockchainStatus({ requestId }: { requestId: string }) {
 }
 
 export default function RepairRequests() {
-  const { repairRequests, user } = useLoaderData<typeof loader>();
+  const { repairRequests, user, hasProperties } = useLoaderData<typeof loader>();
   const { toasts, addToast, removeToast } = useToast();
   const hasRepairRequests = repairRequests.length > 0;
 
@@ -140,7 +154,7 @@ export default function RepairRequests() {
             }
           </p>
         </div>
-        {user.role === 'TENANT' && hasRepairRequests && (
+        {user.role === 'TENANT' && hasProperties && (
           <LinkButton
             to={createRequestPath}
             leftIcon={<Plus className="h-5 w-5" />}
@@ -168,9 +182,11 @@ export default function RepairRequests() {
           icon: ClipboardList,
           title: "No Repair Requests Yet",
           description: user.role === 'TENANT'
-            ? "You haven't submitted any repair requests yet"
+            ? hasProperties 
+              ? "You haven't submitted any repair requests yet"
+              : "You are not currently an active tenant of any properties"
             : "You don't have any repair requests to manage yet",
-          action: user.role === 'TENANT' ? {
+          action: user.role === 'TENANT' && hasProperties ? {
             label: "Submit New Request",
             href: createRequestPath,
             icon: <Plus className="h-5 w-5" />

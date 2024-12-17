@@ -50,12 +50,21 @@ export function useRepairRequest() {
       throw error;
     }
 
-    // Always estimate gas
-    const gasLimitResult = await estimateGas(publicClient, functionName, args);
-    if (gasLimitResult.isErr()) {
-      throw new Error('Failed to estimate gas: ' + gasLimitResult.error.message);
+    let gasLimit: bigint;
+    
+    if (skipGasEstimation) {
+      // Use a safe default gas limit when skipping estimation
+      gasLimit = 500000n;
+    } else {
+      // Try to estimate gas, fall back to default if it fails
+      const gasLimitResult = await estimateGas(publicClient, functionName, args);
+      if (gasLimitResult.isErr()) {
+        console.warn('Gas estimation failed, using default:', gasLimitResult.error.message);
+        gasLimit = 500000n;
+      } else {
+        gasLimit = gasLimitResult.value;
+      }
     }
-    const gasLimit = gasLimitResult.value;
 
     return { client: publicClient, gasLimit };
   };
