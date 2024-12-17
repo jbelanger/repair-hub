@@ -1,7 +1,7 @@
 import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData, Link } from "@remix-run/react";
 import { db } from "~/utils/db.server";
-import { Search, Plus, ClipboardList, ArrowRight } from 'lucide-react';
+import { Search, Plus, ClipboardList, ArrowRight, Link as LinkIcon } from 'lucide-react';
 import { Input } from "~/components/ui/Input";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { DataGrid } from "~/components/ui/DataGrid";
@@ -11,6 +11,10 @@ import { EmptyState } from "~/components/ui/EmptyState";
 import { useToast, ToastManager } from "~/components/ui/Toast";
 import { LinkButton } from "~/components/ui/Button";
 import { requireUser } from "~/utils/session.server";
+import { useRepairRequestRead } from "~/utils/blockchain/hooks/useRepairRequest";
+import { Badge } from "~/components/ui/Badge";
+import { getEtherscanLink } from "~/utils/blockchain/types";
+import { CONTRACT_ADDRESSES } from "~/utils/blockchain/config";
 
 type LoaderData = {
   repairRequests: Array<{
@@ -70,6 +74,42 @@ export async function loader({ request }: LoaderFunctionArgs) {
     repairRequests,
     user
   });
+}
+
+function BlockchainStatus({ requestId }: { requestId: string }) {
+  const { repairRequest, isLoading, isError } = useRepairRequestRead(BigInt(requestId));
+
+  if (isLoading) {
+    return (
+      <Badge variant="default" className="text-white/50">
+        <LinkIcon className="h-4 w-4 mr-1" />
+        Syncing...
+      </Badge>
+    );
+  }
+
+  if (isError || !repairRequest) {
+    return (
+      <Badge variant="danger" className="text-red-400">
+        <LinkIcon className="h-4 w-4 mr-1" />
+        Not Found
+      </Badge>
+    );
+  }
+
+  return (
+    <a
+      href={getEtherscanLink('address', CONTRACT_ADDRESSES.REPAIR_REQUEST)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-block"
+    >
+      <Badge variant="success" className="text-green-400">
+        <LinkIcon className="h-4 w-4 mr-1" />
+        On Chain
+      </Badge>
+    </a>
+  );
 }
 
 export default function RepairRequests() {
@@ -154,7 +194,10 @@ export default function RepairRequests() {
                   </div>
                   <div>
                     <div className="text-sm font-medium text-white/50 mb-1">Status</div>
-                    <RepairStatus status={request.status} />
+                    <div className="flex items-center gap-2">
+                      <RepairStatus status={request.status} />
+                      <BlockchainStatus requestId={request.id} />
+                    </div>
                   </div>
                 </div>
               </div>

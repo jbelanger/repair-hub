@@ -15,7 +15,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useToast, ToastManager } from "~/components/ui/Toast";
 import { Skeleton } from "~/components/ui/LoadingState";
 import { requireUser } from "~/utils/session.server";
-import { type Address, type HexString, getEtherscanLink } from "~/utils/blockchain/types";
+import { type Address, type HexString, getEtherscanLink, toChecksumAddress, hashToHex } from "~/utils/blockchain/types";
 import { hashToHexSync } from "~/utils/blockchain/hash.server";
 
 type LoaderData = {
@@ -316,7 +316,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function RepairRequestDetails() {
-  const navigate = useNavigate();
   const { repairRequest, user, availableStatusUpdates } = useLoaderData<typeof loader>();
   const { updateStatus, updateWorkDetails, withdrawRequest, approveWork, isPending } = useRepairRequest();
   const [events, setEvents] = useState<BlockchainEvent[]>([]);
@@ -326,7 +325,7 @@ export default function RepairRequestDetails() {
   const isTenant = user.address.toLowerCase() === repairRequest.initiator.address.toLowerCase();
 
   // Get blockchain data
-  const { repairRequest: blockchainRequest, isLoading } = useRepairRequestRead(BigInt(repairRequest.id));
+  const { repairRequest: blockchainRequest, isLoading, isError } = useRepairRequestRead(BigInt(repairRequest.id));
 
   // Create a stable callback for event handling
   const handleEvent = useCallback((type: BlockchainEvent['type'], timestamp: bigint, data = {}) => {
@@ -401,7 +400,7 @@ export default function RepairRequestDetails() {
       const workDetails = formData.get("workDetails") as string;
       
       // First update the blockchain
-      const workDetailsHash = hashToHexSync(workDetails);
+      const workDetailsHash = await hashToHex(workDetails);
       await updateWorkDetails(BigInt(repairRequest.id), workDetailsHash);
       
       // Then submit the form to update the database
@@ -587,187 +586,190 @@ export default function RepairRequestDetails() {
             </Card>
           )}
 
-          {/* Blockchain Information Card */}
-          <Card
-            accent="purple"
-            header={{
-              title: "Blockchain Information",
-              icon: <LinkIcon className="h-5 w-5" />,
-              iconBackground: true
-            }}
-          >
-            <div className="p-6">
-              {isLoading ? (
-                <Skeleton className="h-48" />
-              ) : blockchainRequest ? (
-                <div className="space-y-6">
-                  <div className="grid gap-4">
-                    <div className="flex items-start gap-3">
-                      <Hash className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <p className="text-white/70">Description Hash</p>
-                        <p className="text-white text-sm font-mono">{blockchainRequest.descriptionHash}</p>
-                      </div>
-                    </div>
+  {/* Blockchain Information Card */}
+  <Card
+    accent="purple"
+    header={{
+      title: "Blockchain Information",
+      icon: <LinkIcon className="h-5 w-5" />,
+      iconBackground: true
+    }}
+  >
+    <div className="p-6">
+      {isLoading ? (
+        <Skeleton className="h-48" />
+      ) : isError ? (
+        <p className="text-white/70">Error loading blockchain data</p>
+      ) : blockchainRequest ? (
+        <div className="space-y-6">
+          <div className="grid gap-4">
+            <div className="flex items-start gap-3">
+              <Hash className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <p className="text-white/70">Description Hash</p>
+                <p className="text-white text-sm font-mono break-all">{blockchainRequest.descriptionHash}</p>
+              </div>
+            </div>
 
-                    {blockchainRequest.workDetailsHash && (
-                      <div className="flex items-start gap-3">
-                        <Wrench className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
-                        <div className="flex-1 space-y-2">
-                          <p className="text-white/70">Work Details Hash</p>
-                          <p className="text-white text-sm font-mono">{blockchainRequest.workDetailsHash}</p>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <div className="flex items-start gap-3">
-                      <User className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <p className="text-white/70">Initiator Address</p>
-                        <a
-                          href={getEtherscanLink('address', blockchainRequest.initiator)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-white text-sm font-mono hover:text-purple-300 transition-colors"
-                        >
-                          {blockchainRequest.initiator}
-                        </a>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <LinkIcon className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <p className="text-white/70">Contract Address</p>
-                        <a
-                          href={getEtherscanLink('address', CONTRACT_ADDRESSES.REPAIR_REQUEST)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-white text-sm font-mono hover:text-purple-300 transition-colors"
-                        >
-                          {CONTRACT_ADDRESSES.REPAIR_REQUEST}
-                        </a>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="flex items-start gap-3">
-                        <Calendar className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <p className="text-white/70">Created On Chain</p>
-                          <p className="text-white">{formatTimestamp(blockchainRequest.createdAt)}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-start gap-3">
-                        <Clock className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <p className="text-white/70">Last Updated On Chain</p>
-                          <p className="text-white">{formatTimestamp(blockchainRequest.updatedAt)}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-purple-600/10">
-                    <div className="flex items-center gap-2 mb-3">
-                      <History className="h-5 w-5 text-purple-400" />
-                      <h3 className="text-white font-semibold">Event History</h3>
-                    </div>
-                    <div className="space-y-2">
-                      {events.length > 0 ? (
-                        events
-                          .sort((a, b) => Number(b.timestamp - a.timestamp))
-                          .map((event, index) => (
-                            <div key={index} className="text-white/70 text-sm">
-                              {formatTimestamp(event.timestamp)} -{' '}
-                              {event.type === 'created' && 'Request created on chain'}
-                              {event.type === 'updated' && `Status updated to ${RepairRequestStatusType[event.data.status!]}`}
-                              {event.type === 'workDetailsUpdated' && 'Work details updated'}
-                            </div>
-                          ))
-                      ) : (
-                        <p className="text-white/70 text-sm">No events recorded yet</p>
-                      )}
-                    </div>
-                  </div>
+            {blockchainRequest.workDetailsHash && (
+              <div className="flex items-start gap-3">
+                <Wrench className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
+                <div className="flex-1 space-y-2">
+                  <p className="text-white/70">Work Details Hash</p>
+                  <p className="text-white text-sm font-mono break-all">{blockchainRequest.workDetailsHash}</p>
                 </div>
+              </div>
+            )}
+            
+            <div className="flex items-start gap-3">
+              <User className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <p className="text-white/70">Initiator Address</p>
+                <a
+                  href={getEtherscanLink('address', toChecksumAddress(blockchainRequest.initiator))}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-white text-sm font-mono hover:text-purple-300 transition-colors break-all"
+                >
+                  {toChecksumAddress(blockchainRequest.initiator)}
+                </a>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <LinkIcon className="h-5 w-5 text-purple-400 mt-1.5 flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <p className="text-white/70">Contract Address</p>
+                <a
+                  href={getEtherscanLink('address', CONTRACT_ADDRESSES.REPAIR_REQUEST)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-white text-sm font-mono hover:text-purple-300 transition-colors break-all"
+                >
+                  {CONTRACT_ADDRESSES.REPAIR_REQUEST}
+                </a>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-start gap-3">
+                <Calendar className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-white/70">Created On Chain</p>
+                  <p className="text-white">{formatTimestamp(blockchainRequest.createdAt)}</p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-purple-400 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-white/70">Last Updated On Chain</p>
+                  <p className="text-white">{formatTimestamp(blockchainRequest.updatedAt)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-purple-600/10">
+            <div className="flex items-center gap-2 mb-3">
+              <History className="h-5 w-5 text-purple-400" />
+              <h3 className="text-white font-semibold">Event History</h3>
+            </div>
+            <div className="space-y-2">
+              {events.length > 0 ? (
+                events
+                  .sort((a, b) => Number(b.timestamp - a.timestamp))
+                  .map((event, index) => (
+                    <div key={index} className="text-white/70 text-sm">
+                      {formatTimestamp(event.timestamp)} -{' '}
+                      {event.type === 'created' && 'Request created on chain'}
+                      {event.type === 'updated' && `Status updated to ${RepairRequestStatusType[event.data.status!]}`}
+                      {event.type === 'workDetailsUpdated' && 'Work details updated'}
+                    </div>
+                  ))
               ) : (
-                <p className="text-white/70">No blockchain data available</p>
+                <p className="text-white/70 text-sm">No events recorded yet</p>
               )}
             </div>
-          </Card>
+          </div>
         </div>
+      ) : (
+        <p className="text-white/70">No blockchain data available</p>
+      )}
+    </div>
+  </Card>
 
-        <div className="space-y-6">
-          {/* Property Details Card */}
-          <Card
-            accent="purple"
-            header={{
-              title: "Property Details",
-              icon: <Building2 className="h-5 w-5" />,
-              iconBackground: true
-            }}
-          >
-            <div className="p-6 space-y-4">
-              <div className="flex items-start gap-3">
-                <Building2 className="h-5 w-5 text-purple-400 mt-0.5" />
-                <div>
-                  <p className="text-white/70">Address</p>
-                  <p className="text-white">{repairRequest.property.address}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <User className="h-5 w-5 text-purple-400 mt-0.5" />
-                <div>
-                  <p className="text-white/70">Landlord</p>
-                  <p className="text-white">{repairRequest.property.landlord.name}</p>
-                </div>
-              </div>
-            </div>
-          </Card>
+  </div>
 
-          {/* Request Details Card */}
-          <Card
-            accent="purple"
-            header={{
-              title: "Request Details",
-              icon: <Clock className="h-5 w-5" />,
-              iconBackground: true
-            }}
-          >
-            <div className="p-6 space-y-4">
-              <div className="flex items-start gap-3">
-                <User className="h-5 w-5 text-purple-400 mt-0.5" />
-                <div>
-                  <p className="text-white/70">Submitted by</p>
-                  <p className="text-white">{repairRequest.initiator.name}</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Calendar className="h-5 w-5 text-purple-400 mt-0.5" />
-                <div>
-                  <p className="text-white/70">Created</p>
-                  <p className="text-white">
-                    {new Date(repairRequest.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Clock className="h-5 w-5 text-purple-400 mt-0.5" />
-                <div>
-                  <p className="text-white/70">Last Updated</p>
-                  <p className="text-white">
-                    {new Date(repairRequest.updatedAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </Card>
+<div className="space-y-6">
+  {/* Property Details Card */}
+  <Card
+    accent="purple"
+    header={{
+      title: "Property Details",
+      icon: <Building2 className="h-5 w-5" />,
+      iconBackground: true
+    }}
+  >
+    <div className="p-6 space-y-4">
+      <div className="flex items-start gap-3">
+        <Building2 className="h-5 w-5 text-purple-400 mt-0.5" />
+        <div>
+          <p className="text-white/70">Address</p>
+          <p className="text-white">{repairRequest.property.address}</p>
         </div>
       </div>
-
-      <ToastManager toasts={toasts} removeToast={removeToast} />
+      <div className="flex items-start gap-3">
+        <User className="h-5 w-5 text-purple-400 mt-0.5" />
+        <div>
+          <p className="text-white/70">Landlord</p>
+          <p className="text-white">{repairRequest.property.landlord.name}</p>
+        </div>
+      </div>
     </div>
-  );
+  </Card>
+
+  {/* Request Details Card */}
+  <Card
+    accent="purple"
+    header={{
+      title: "Request Details",
+      icon: <Clock className="h-5 w-5" />,
+      iconBackground: true
+    }}
+  >
+    <div className="p-6 space-y-4">
+      <div className="flex items-start gap-3">
+        <User className="h-5 w-5 text-purple-400 mt-0.5" />
+        <div>
+          <p className="text-white/70">Submitted by</p>
+          <p className="text-white">{repairRequest.initiator.name}</p>
+        </div>
+      </div>
+      <div className="flex items-start gap-3">
+        <Calendar className="h-5 w-5 text-purple-400 mt-0.5" />
+        <div>
+          <p className="text-white/70">Created</p>
+          <p className="text-white">
+            {new Date(repairRequest.createdAt).toLocaleDateString()}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-start gap-3">
+        <Clock className="h-5 w-5 text-purple-400 mt-0.5" />
+        <div>
+          <p className="text-white/70">Last Updated</p>
+          <p className="text-white">
+            {new Date(repairRequest.updatedAt).toLocaleDateString()}
+          </p>
+        </div>
+      </div>
+    </div>
+  </Card>
+</div>
+</div>
+
+<ToastManager toasts={toasts} removeToast={removeToast} />
+</div>
+);
 }

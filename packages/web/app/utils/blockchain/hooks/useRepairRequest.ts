@@ -3,10 +3,10 @@ import {
   useWriteContract,
   useWatchContractEvent
 } from 'wagmi'
-import { type Log, decodeEventLog } from 'viem'
+import { type Address, type HexString } from '../types'
 import { RepairRequestContractABI } from '../abis/RepairRequestContract'
 import { CONTRACT_ADDRESSES, RepairRequest, RepairRequestStatusType } from '../config'
-import { type Address, type HexString } from '../types'
+import { decodeEventLog, type TransactionReceipt } from 'viem'
 
 interface BlockchainRepairRequestResult {
   id: bigint;
@@ -15,24 +15,30 @@ interface BlockchainRepairRequestResult {
 
 interface ContractWriteResult {
   hash: HexString;
-  wait: () => Promise<{ logs: Log[] }>;
+  wait: () => Promise<TransactionReceipt>;
 }
 
-interface ContractEventLog extends Log {
-  args?: {
-    id?: bigint;
-    initiator?: string;
-    landlord?: string;
-    propertyId?: string;
-    descriptionHash?: string;
-    oldHash?: string;
-    newHash?: string;
-    oldStatus?: bigint;
-    newStatus?: bigint;
-    createdAt?: bigint;
-    updatedAt?: bigint;
-  };
-}
+type DecodedEventArgs = {
+  id: bigint;
+  initiator: Address;
+  landlord: Address;
+} & (
+  | {
+      propertyId: string;
+      descriptionHash: string;
+      createdAt: bigint;
+    }
+  | {
+      oldStatus: bigint;
+      newStatus: bigint;
+      updatedAt: bigint;
+    }
+  | {
+      oldHash: string;
+      newHash: string;
+      updatedAt: bigint;
+    }
+);
 
 export function useRepairRequest() {
   const { writeContractAsync, isPending, isSuccess, error } = useWriteContract()
@@ -75,13 +81,12 @@ export function useRepairRequest() {
         topics: event.topics
       })
 
-      const id = decoded.args.id as bigint
-
-      if (!id) {
-        throw new Error('Failed to get request ID from event')
+      const args = decoded.args as DecodedEventArgs
+      if (!('propertyId' in args)) {
+        throw new Error('Invalid event args')
       }
 
-      return { id, hash: result.hash }
+      return { id: args.id, hash: result.hash }
     } catch (error) {
       console.error('Error creating repair request:', error)
       throw error
@@ -238,23 +243,26 @@ export function useWatchRepairRequestEvents(callbacks: {
     eventName: 'RepairRequestCreated',
     onLogs: (logs) => {
       if (callbacks.onCreated) {
-        for (const log of logs as ContractEventLog[]) {
-          const { args } = log
-          if (args && 
-              args.id !== undefined && 
-              args.initiator !== undefined && 
-              args.landlord !== undefined &&
-              args.propertyId !== undefined && 
-              args.descriptionHash !== undefined && 
-              args.createdAt !== undefined) {
+        for (const log of logs) {
+          try {
+            const decoded = decodeEventLog({
+              abi: RepairRequestContractABI,
+              data: log.data,
+              topics: log.topics
+            })
+            const args = decoded.args as DecodedEventArgs
+            if (!('propertyId' in args)) continue
+
             callbacks.onCreated(
               args.id,
-              args.initiator as Address,
-              args.landlord as Address,
+              args.initiator,
+              args.landlord,
               args.propertyId as HexString,
               args.descriptionHash as HexString,
               args.createdAt
             )
+          } catch (error) {
+            console.error('Error decoding RepairRequestCreated event:', error)
           }
         }
       }
@@ -267,23 +275,26 @@ export function useWatchRepairRequestEvents(callbacks: {
     eventName: 'RepairRequestStatusChanged',
     onLogs: (logs) => {
       if (callbacks.onStatusChanged) {
-        for (const log of logs as ContractEventLog[]) {
-          const { args } = log
-          if (args && 
-              args.id !== undefined && 
-              args.initiator !== undefined &&
-              args.landlord !== undefined &&
-              args.oldStatus !== undefined &&
-              args.newStatus !== undefined &&
-              args.updatedAt !== undefined) {
+        for (const log of logs) {
+          try {
+            const decoded = decodeEventLog({
+              abi: RepairRequestContractABI,
+              data: log.data,
+              topics: log.topics
+            })
+            const args = decoded.args as DecodedEventArgs
+            if (!('oldStatus' in args)) continue
+
             callbacks.onStatusChanged(
               args.id,
-              args.initiator as Address,
-              args.landlord as Address,
+              args.initiator,
+              args.landlord,
               Number(args.oldStatus) as RepairRequestStatusType,
               Number(args.newStatus) as RepairRequestStatusType,
               args.updatedAt
             )
+          } catch (error) {
+            console.error('Error decoding RepairRequestStatusChanged event:', error)
           }
         }
       }
@@ -296,23 +307,26 @@ export function useWatchRepairRequestEvents(callbacks: {
     eventName: 'DescriptionUpdated',
     onLogs: (logs) => {
       if (callbacks.onDescriptionUpdated) {
-        for (const log of logs as ContractEventLog[]) {
-          const { args } = log
-          if (args && 
-              args.id !== undefined && 
-              args.initiator !== undefined &&
-              args.landlord !== undefined &&
-              args.oldHash !== undefined && 
-              args.newHash !== undefined && 
-              args.updatedAt !== undefined) {
+        for (const log of logs) {
+          try {
+            const decoded = decodeEventLog({
+              abi: RepairRequestContractABI,
+              data: log.data,
+              topics: log.topics
+            })
+            const args = decoded.args as DecodedEventArgs
+            if (!('oldHash' in args)) continue
+
             callbacks.onDescriptionUpdated(
               args.id,
-              args.initiator as Address,
-              args.landlord as Address,
+              args.initiator,
+              args.landlord,
               args.oldHash as HexString,
               args.newHash as HexString,
               args.updatedAt
             )
+          } catch (error) {
+            console.error('Error decoding DescriptionUpdated event:', error)
           }
         }
       }
@@ -325,23 +339,26 @@ export function useWatchRepairRequestEvents(callbacks: {
     eventName: 'WorkDetailsUpdated',
     onLogs: (logs) => {
       if (callbacks.onWorkDetailsUpdated) {
-        for (const log of logs as ContractEventLog[]) {
-          const { args } = log
-          if (args && 
-              args.id !== undefined && 
-              args.initiator !== undefined &&
-              args.landlord !== undefined &&
-              args.oldHash !== undefined && 
-              args.newHash !== undefined && 
-              args.updatedAt !== undefined) {
+        for (const log of logs) {
+          try {
+            const decoded = decodeEventLog({
+              abi: RepairRequestContractABI,
+              data: log.data,
+              topics: log.topics
+            })
+            const args = decoded.args as DecodedEventArgs
+            if (!('oldHash' in args)) continue
+
             callbacks.onWorkDetailsUpdated(
               args.id,
-              args.initiator as Address,
-              args.landlord as Address,
+              args.initiator,
+              args.landlord,
               args.oldHash as HexString,
               args.newHash as HexString,
               args.updatedAt
             )
+          } catch (error) {
+            console.error('Error decoding WorkDetailsUpdated event:', error)
           }
         }
       }
