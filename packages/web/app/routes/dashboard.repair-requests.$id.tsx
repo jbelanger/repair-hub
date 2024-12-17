@@ -1,53 +1,21 @@
 import { json, redirect, type LoaderFunctionArgs, type ActionFunctionArgs } from "@remix-run/node";
-import { useLoaderData, Form } from "@remix-run/react";
+import { useLoaderData } from "@remix-run/react";
 import { db } from "~/utils/db.server";
-import { useRepairRequest, useRepairRequestRead, useWatchRepairRequestEvents } from "~/utils/blockchain/hooks/useRepairRequest";
+import { useRepairRequest, useRepairRequestRead } from "~/utils/blockchain/hooks/useRepairRequest";
 import { RepairRequestStatusType } from "~/utils/blockchain/config";
 import { PageHeader } from "~/components/ui/PageHeader";
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { useToast, ToastManager } from "~/components/ui/Toast";
 import { requireUser } from "~/utils/session.server";
-import { type Address, type HexString, hashToHex } from "~/utils/blockchain/types";
+import { type Address, hashToHex } from "~/utils/blockchain/types";
 import { hashToHexSync } from "~/utils/blockchain/hash.server";
-import { type BlockchainEvent, statusMap, getAvailableStatusUpdates } from "~/utils/repair-request";
+import { statusMap, getAvailableStatusUpdates } from "~/utils/repair-request";
 import { RepairRequestDescription } from "~/components/repair-request/RepairRequestDescription";
 import { RepairRequestWorkDetails } from "~/components/repair-request/RepairRequestWorkDetails";
 import { RepairRequestBlockchain } from "~/components/repair-request/RepairRequestBlockchain";
 import { RepairRequestDetails } from "~/components/repair-request/RepairRequestDetails";
-
-type LoaderData = {
-  repairRequest: {
-    id: string;
-    description: string;
-    urgency: string;
-    status: string;
-    attachments: string;
-    workDetails: string | null;
-    workDetailsHash: string | null;
-    createdAt: string;
-    updatedAt: string;
-    property: {
-      id: string;
-      address: string;
-      landlord: {
-        id: string;
-        name: string;
-        address: Address;
-      };
-    };
-    initiator: {
-      id: string;
-      name: string;
-      address: Address;
-    };
-  };
-  user: {
-    id: string;
-    role: string;
-    address: Address;
-  };
-  availableStatusUpdates: RepairRequestStatusType[];
-};
+import { useRepairRequestEvents } from "~/hooks/useRepairRequestEvents";
+import type { LoaderData, BlockchainRepairRequest } from "~/types/repair-request";
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -194,7 +162,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return json({ error: "Invalid status" }, { status: 400 });
     }
 
-    // Validate status transition based on user role
     const availableStatusUpdates = getAvailableStatusUpdates(
       repairRequest.status,
       user.role,
@@ -263,17 +230,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
 export default function RepairRequestPage() {
   const { repairRequest, user, availableStatusUpdates } = useLoaderData<typeof loader>();
   const { updateStatus, updateWorkDetails, withdrawRequest, approveWork, isPending } = useRepairRequest();
-  const [events, setEvents] = useState<BlockchainEvent[]>([]);
   const [workDetailsInput, setWorkDetailsInput] = useState(repairRequest.workDetails || "");
   const { toasts, addToast, removeToast } = useToast();
   const isLandlord = user.address.toLowerCase() === repairRequest.property.landlord.address.toLowerCase();
   const isTenant = user.address.toLowerCase() === repairRequest.initiator.address.toLowerCase();
 
-  // Get blockchain data
+  // Get blockchain data and events
   const { repairRequest: blockchainRequest, isLoading, isError } = useRepairRequestRead(BigInt(repairRequest.id));
+  const { events, eventHandlers } = useRepairRequestEvents(repairRequest.id);
 
   // Transform blockchain request to match component interface
-  const transformedBlockchainRequest = blockchainRequest ? {
+  const transformedBlockchainRequest: BlockchainRepairRequest | null = blockchainRequest ? {
     descriptionHash: blockchainRequest.descriptionHash,
     workDetailsHash: blockchainRequest.workDetailsHash,
     initiator: blockchainRequest.initiator,
@@ -281,51 +248,10 @@ export default function RepairRequestPage() {
     updatedAt: blockchainRequest.updatedAt,
   } : null;
 
-  // Create a stable callback for event handling
-  const handleEvent = useCallback((type: BlockchainEvent['type'], timestamp: bigint, data = {}) => {
-    setEvents(prev => {
-      const exists = prev.some(e => 
-        e.type === type && 
-        e.timestamp === timestamp &&
-        JSON.stringify(e.data) === JSON.stringify(data)
-      );
-      
-      if (exists) return prev;
-      
-      return [...prev, { type, timestamp, data }];
-    });
-  }, []);
-
-  // Watch for blockchain events
-  useWatchRepairRequestEvents({
-    onCreated: (id: bigint, initiator: Address, landlord: Address, propertyId: HexString, descriptionHash: HexString, createdAt: bigint) => {
-      if (id.toString() === repairRequest.id) {
-        handleEvent('created', createdAt);
-      }
-    },
-    onStatusChanged: (id: bigint, initiator: Address, landlord: Address, oldStatus: RepairRequestStatusType, newStatus: RepairRequestStatusType, updatedAt: bigint) => {
-      if (id.toString() === repairRequest.id) {
-        handleEvent('updated', updatedAt, { status: newStatus });
-      }
-    },
-    onWorkDetailsUpdated: (id: bigint, initiator: Address, landlord: Address, oldHash: HexString, newHash: HexString, updatedAt: bigint) => {
-      if (id.toString() === repairRequest.id) {
-        handleEvent('workDetailsUpdated', updatedAt, { oldHash, newHash });
-      }
-    }
-  });
-
-  // Clear events when repair request ID changes
-  useEffect(() => {
-    setEvents([]);
-  }, [repairRequest.id]);
-
   const handleStatusUpdate = async (newStatus: RepairRequestStatusType) => {
     try {
-      // First update the blockchain
       await updateStatus(BigInt(repairRequest.id), newStatus);
       
-      // Then update the database through the form action
       const formData = new FormData();
       formData.append("_action", "updateStatus");
       formData.append("status", newStatus.toString());
@@ -353,11 +279,9 @@ export default function RepairRequestPage() {
       const formData = new FormData(e.currentTarget);
       const workDetails = formData.get("workDetails") as string;
       
-      // First update the blockchain
       const workDetailsHash = await hashToHex(workDetails);
       await updateWorkDetails(BigInt(repairRequest.id), workDetailsHash);
       
-      // Then submit the form to update the database
       const response = await fetch(`/dashboard/repair-requests/${repairRequest.id}`, {
         method: "POST",
         body: formData,
@@ -377,10 +301,8 @@ export default function RepairRequestPage() {
 
   const handleWithdrawRequest = async () => {
     try {
-      // First update the blockchain
       await withdrawRequest(BigInt(repairRequest.id));
       
-      // Then update the database
       const formData = new FormData();
       formData.append("_action", "withdrawRequest");
       
@@ -403,10 +325,8 @@ export default function RepairRequestPage() {
 
   const handleApproveWork = async (isAccepted: boolean) => {
     try {
-      // First update the blockchain
       await approveWork(BigInt(repairRequest.id), isAccepted);
       
-      // Then update the database
       const formData = new FormData();
       formData.append("_action", "approveWork");
       formData.append("isAccepted", isAccepted.toString());
