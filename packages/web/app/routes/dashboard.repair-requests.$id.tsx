@@ -10,10 +10,10 @@ import { requireUser } from "~/utils/session.server";
 import { type Address, hashToHex } from "~/utils/blockchain/types";
 import { hashToHexSync } from "~/utils/blockchain/hash.server";
 import { statusMap, getAvailableStatusUpdates } from "~/utils/repair-request";
-import { RepairRequestDescription } from "~/components/repair-request/RepairRequestDescription";
-import { RepairRequestWorkDetails } from "~/components/repair-request/RepairRequestWorkDetails";
 import { RepairRequestBlockchain } from "~/components/repair-request/RepairRequestBlockchain";
 import { RepairRequestDetails } from "~/components/repair-request/RepairRequestDetails";
+import { LandlordView } from "~/components/repair-request/LandlordView";
+import { TenantView } from "~/components/repair-request/TenantView";
 import { useRepairRequestEvents } from "~/hooks/useRepairRequestEvents";
 import type { LoaderData, BlockchainRepairRequest } from "~/types/repair-request";
 
@@ -358,24 +358,24 @@ export default function RepairRequestPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          <RepairRequestDescription
-            description={repairRequest.description}
-            urgency={repairRequest.urgency}
-            status={repairRequest.status}
-            availableStatusUpdates={availableStatusUpdates}
-            isTenant={isTenant}
-            isPending={isPending}
-            onStatusUpdate={handleStatusUpdate}
-            onWithdrawRequest={handleWithdrawRequest}
-            onApproveWork={handleApproveWork}
-          />
-
-          {isLandlord && (
-            <RepairRequestWorkDetails
-              workDetails={workDetailsInput}
+          {isLandlord ? (
+            <LandlordView
+              repairRequest={repairRequest}
+              availableStatusUpdates={availableStatusUpdates}
               isPending={isPending}
+              workDetails={workDetailsInput}
               onWorkDetailsChange={setWorkDetailsInput}
-              onSubmit={handleWorkDetailsUpdate}
+              onWorkDetailsSubmit={handleWorkDetailsUpdate}
+              onStatusUpdate={handleStatusUpdate}
+            />
+          ) : (
+            <TenantView
+              repairRequest={repairRequest}
+              availableStatusUpdates={availableStatusUpdates}
+              isPending={isPending}
+              onStatusUpdate={handleStatusUpdate}
+              onWithdrawRequest={handleWithdrawRequest}
+              onApproveWork={handleApproveWork}
             />
           )}
 
