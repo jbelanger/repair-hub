@@ -1,6 +1,6 @@
 import { json, redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useActionData, useNavigate, useNavigation, useLoaderData, useSubmit } from "@remix-run/react";
-import { useAccount, usePublicClient } from "wagmi";
+import { useAccount } from "wagmi";
 import { db } from "~/utils/db.server";
 import { useRepairRequest } from "~/utils/blockchain/hooks/useRepairRequest";
 import { Building2, AlertTriangle, FileText } from 'lucide-react';
@@ -8,18 +8,13 @@ import { Select } from "~/components/ui/Select";
 import { TextArea } from "~/components/ui/TextArea";
 import { useState, useEffect, useRef } from "react";
 import { requireUser } from "~/utils/session.server";
-import { cn } from "~/utils/cn";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { Card } from "~/components/ui/Card";
 import { FormField, FormSection, FormActions, FormError } from "~/components/ui/Form";
 import { EmptyState } from "~/components/ui/EmptyState";
 import { useToast, ToastManager } from "~/components/ui/Toast";
-import { Skeleton } from "~/components/ui/LoadingState";
-import { type Address, type HexString, toHexString, hashToHex } from "~/utils/blockchain/types";
+import { type Address, toHexString, hashToHex } from "~/utils/blockchain/types";
 import { hashToHexSync } from "~/utils/blockchain/hash.server";
-import { RepairRequestContractABI } from "~/utils/blockchain/abis/RepairRequestContract";
-import { CONTRACT_ADDRESSES } from "~/utils/blockchain/config";
-import { decodeEventLog } from 'viem';
 
 type ActionData = {
   success?: boolean;
@@ -50,12 +45,10 @@ type LoaderData = {
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
   
-  // Only tenants can create repair requests
   if (user.role !== "TENANT") {
     return redirect("..");
   }
 
-  // Get properties where user is a tenant
   const properties = await db.property.findMany({
     where: {
       tenantLeases: {
@@ -85,7 +78,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   });
 
-  // Transform the data to include leaseId and landlordAddress
   const transformedProperties = properties.map(property => ({
     id: property.id,
     address: property.address,
@@ -99,7 +91,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const user = await requireUser(request);
 
-  // Only tenants can create repair requests
   if (user.role !== "TENANT") {
     return json<ActionData>(
       { success: false, error: "Only tenants can create repair requests" },
@@ -114,7 +105,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const urgency = formData.get("urgency") as string;
   const blockchainId = formData.get("blockchainId") as string;
 
-  // Validate required fields
   const fields = { propertyId, description, urgency };
   const fieldErrors = {
     propertyId: propertyId ? null : "Property is required",
@@ -124,18 +114,12 @@ export async function action({ request }: ActionFunctionArgs) {
 
   if (Object.values(fieldErrors).some(Boolean)) {
     return json<ActionData>(
-      { 
-        success: false, 
-        error: "Please fill in all required fields",
-        fields,
-        stage
-      },
+      { success: false, error: "Please fill in all required fields", fields, stage },
       { status: 400 }
     );
   }
 
   try {
-    // Verify property exists and user is an active tenant
     const property = await db.property.findFirst({
       where: {
         id: propertyId,
@@ -158,41 +142,25 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (!property || !property.tenantLeases[0]) {
       return json<ActionData>(
-        { 
-          success: false, 
-          error: "Property not found or you are not an active tenant",
-          fields,
-          stage
-        },
+        { success: false, error: "Property not found or you are not an active tenant", fields, stage },
         { status: 404 }
       );
     }
 
     if (stage === 'validate') {
-      // Just validate the form data
-      return json<ActionData>({ 
-        success: true,
-        fields,
-        stage
-      });
-    } else if (stage === 'create') {
-      // Create the repair request in the database
+      return json<ActionData>({ success: true, fields, stage });
+    }
+
+    if (stage === 'create') {
       if (!blockchainId) {
         return json<ActionData>(
-          { 
-            success: false, 
-            error: "Missing blockchain data",
-            fields,
-            stage
-          },
+          { success: false, error: "Missing blockchain data", fields, stage },
           { status: 400 }
         );
       }
 
-      // Create description hash for blockchain verification using server-side function
       const descriptionHash = hashToHexSync(description);
-
-      await db.repairRequest.create({
+      const repairRequest = await db.repairRequest.create({
         data: {
           id: blockchainId,
           description,
@@ -206,12 +174,19 @@ export async function action({ request }: ActionFunctionArgs) {
         },
       });
 
-      return json<ActionData>({ success: true, stage });
+      return json<ActionData>({ 
+        success: true, 
+        stage,
+        fields: {
+          ...fields,
+          propertyId: repairRequest.propertyId
+        }
+      });
     }
   } catch (error) {
     console.error("Create repair request error:", error);
     return json<ActionData>(
-      { success: false, error: "Failed to create repair request", stage },
+      { success: false, error: error instanceof Error ? error.message : "Failed to create repair request", fields, stage },
       { status: 500 }
     );
   }
@@ -219,7 +194,6 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function CreateRepairRequest() {
   const { user, properties } = useLoaderData<typeof loader>();
-  const { address } = useAccount();
   const actionData = useActionData<typeof action>();
   const { createRepairRequest } = useRepairRequest();
   const navigate = useNavigate();
@@ -229,130 +203,94 @@ export default function CreateRepairRequest() {
   const [selectedProperty, setSelectedProperty] = useState(actionData?.fields?.propertyId || "");
   const [selectedUrgency, setSelectedUrgency] = useState(actionData?.fields?.urgency || "");
   const [blockchainError, setBlockchainError] = useState<string>();
-  const [isWaitingForEvent, setIsWaitingForEvent] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [isExiting, setIsExiting] = useState(false);
+  const [isWaitingForTransaction, setIsWaitingForTransaction] = useState(false);
   const isSubmitting = navigation.state === "submitting";
-  const publicClient = usePublicClient();
-  const mounted = useRef(true);
+  const hasHandledSuccess = useRef(false);
 
   useEffect(() => {
+    if (actionData?.success && actionData.stage === 'create' && !hasHandledSuccess.current) {
+      hasHandledSuccess.current = true;
+      addToast(
+        "Your repair request has been saved successfully",
+        "success",
+        "Save Successful"
+      );
+      // Delay navigation to let toast be visible
+      setTimeout(() => {
+        navigate('/dashboard/repair-requests', { replace: true });
+      }, 1500);
+    } else if (actionData?.error) {
+      setBlockchainError(actionData.error);
+    }
+  }, [actionData, addToast, navigate]);
+
+  // Reset the success handler when the component unmounts
+  useEffect(() => {
     return () => {
-      mounted.current = false;
+      hasHandledSuccess.current = false;
     };
   }, []);
 
-  useEffect(() => {
-    if (!publicClient || !isWaitingForEvent || !mounted.current) return;
-
-    const unwatch = publicClient.watchContractEvent({
-      address: CONTRACT_ADDRESSES.REPAIR_REQUEST as Address,
-      abi: RepairRequestContractABI,
-      eventName: 'RepairRequestCreated',
-      onLogs: (logs) => {
-        logs.forEach(log => {
-          try {
-            const decoded = decodeEventLog({
-              abi: RepairRequestContractABI,
-              data: log.data,
-              topics: log.topics
-            });
-            const args = decoded.args as any;
-            
-            if (args.initiator.toLowerCase() === user.address.toLowerCase()) {
-              if (mounted.current) {
-                try {
-                  const formData = new FormData();
-                  formData.append("_stage", "create");
-                  formData.append("propertyId", actionData?.fields?.propertyId || "");
-                  formData.append("description", actionData?.fields?.description || "");
-                  formData.append("urgency", actionData?.fields?.urgency || "");
-                  formData.append("blockchainId", args.id.toString());
-                  
-                  submit(formData, { method: "post" });
-                  setIsWaitingForEvent(false);
-                  addToast(
-                    "Your repair request has been successfully created on the blockchain",
-                    "success",
-                    "Blockchain Transaction Confirmed"
-                  );
-                } catch (error) {
-                  console.error("Database error:", error);
-                  const errorMessage = error instanceof Error ? error.message : "Failed to save repair request to database";
-                  setBlockchainError(errorMessage);
-                  setIsWaitingForEvent(false);
-                  addToast(
-                    errorMessage,
-                    "error",
-                    "Database Error"
-                  );
-                }
-              }
-            }
-          } catch (error) {
-            console.error('Error handling create event:', error);
-          }
-        });
-      }
-    });
-
-    return () => {
-      unwatch();
-    };
-  }, [publicClient, isWaitingForEvent, user.address]);
-
-  // Handle blockchain creation
   const handleCreateOnChain = async (e: React.MouseEvent<HTMLButtonElement>) => {
     if (actionData?.success && actionData.fields) {
       e.preventDefault();
       try {
         setBlockchainError(undefined);
-        setIsWaitingForEvent(true);
-        addToast(
-          "Please confirm the transaction in your wallet",
-          "info",
-          "Creating Repair Request"
-        );
+        setIsWaitingForTransaction(true);
         
         const { propertyId, description } = actionData.fields;
         const selectedProperty = properties.find(p => p.id === propertyId);
         if (!selectedProperty) {
           throw new Error("Selected property not found");
         }
-        // Use the async browser-side hash function for client-side operations
+  
         const descriptionHash = await hashToHex(description);
         const blockchainPropertyId = toHexString(propertyId);
         const result = await createRepairRequest(blockchainPropertyId, descriptionHash, selectedProperty.landlordAddress);
         
-        // Check if the transaction was rejected
         if (result.isErr()) {
           const error = result.error;
-          if (error.message.toLowerCase().includes('user rejected') || 
-              error.message.toLowerCase().includes('user denied')) {
-            setIsWaitingForEvent(false); // Reset the waiting state
+          if (error.message.toLowerCase().includes('user rejected')) {
+            setIsWaitingForTransaction(false);
             addToast(
               "Transaction was rejected",
               "error",
               "Transaction Failed"
             );
-            return; // Exit early without throwing
+            return;
           }
-          throw error; // Throw other errors
+          throw error;
         }
+  
+        addToast(
+          "Transaction confirmed. Saving to database...",
+          "success",
+          "Blockchain Transaction Confirmed"
+        );
+  
+        const formData = new FormData();
+        formData.append("_stage", "create");
+        formData.append("propertyId", actionData.fields.propertyId);
+        formData.append("description", actionData.fields.description);
+        formData.append("urgency", actionData.fields.urgency);
+        formData.append("blockchainId", result.value.id.toString());
+  
+        submit(formData, { method: "post", replace: true });
+        setIsWaitingForTransaction(false);
+  
       } catch (error) {
         console.error("Blockchain error:", error);
-        const errorMessage = error instanceof Error ? error.message : "Failed to create repair request on blockchain";
-        setBlockchainError(errorMessage);
-        setIsWaitingForEvent(false); // Reset the waiting state
+        setBlockchainError(error instanceof Error ? error.message : "Failed to create repair request");
+        setIsWaitingForTransaction(false);
         addToast(
-          errorMessage,
+          error instanceof Error ? error.message : "Failed to create repair request",
           "error",
           "Blockchain Error"
         );
       }
     }
   };
-
+  
   return (
     <div className="p-6">
       <PageHeader
@@ -360,7 +298,7 @@ export default function CreateRepairRequest() {
         subtitle="Submit a new repair request for your property"
         backTo="/dashboard/repair-requests"
       />
-
+  
       {properties.length === 0 ? (
         <EmptyState
           icon={Building2}
@@ -398,7 +336,7 @@ export default function CreateRepairRequest() {
                     ))}
                   </Select>
                 </FormField>
-
+  
                 <FormField label="Description">
                   <TextArea
                     name="description"
@@ -408,7 +346,7 @@ export default function CreateRepairRequest() {
                     defaultValue={actionData?.fields?.description}
                   />
                 </FormField>
-
+  
                 <FormField label="Urgency Level">
                   <Select
                     name="urgency"
@@ -424,27 +362,27 @@ export default function CreateRepairRequest() {
                   </Select>
                 </FormField>
               </FormSection>
-
+  
               <FormError error={actionData?.error || blockchainError} />
-
+  
               {actionData?.success && actionData.stage === 'validate' && (
                 <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 text-green-200 mb-6">
-                  Form validated successfully. {isWaitingForEvent ? "Waiting for blockchain confirmation..." : "Ready to create on blockchain."}
+                  Form validated successfully. {isWaitingForTransaction ? "Waiting for blockchain confirmation..." : "Ready to create on blockchain."}
                 </div>
               )}
-
+  
               <FormActions
                 cancelHref=".."
                 submitLabel={
                   actionData?.success && actionData.stage === 'validate'
-                    ? isWaitingForEvent
+                    ? isWaitingForTransaction
                       ? "Confirming..."
                       : "Confirm on Blockchain"
                     : isSubmitting
                     ? "Validating..."
                     : "Create Request"
                 }
-                isSubmitting={isSubmitting || isWaitingForEvent}
+                isSubmitting={isSubmitting || isWaitingForTransaction}
                 onSubmit={
                   actionData?.success && actionData.stage === 'validate'
                     ? handleCreateOnChain
@@ -455,8 +393,15 @@ export default function CreateRepairRequest() {
           </Card>
         </div>
       )}
-
+  
       <ToastManager toasts={toasts} removeToast={removeToast} />
     </div>
   );
-}
+  }
+  
+  
+  
+  
+  
+  
+  
