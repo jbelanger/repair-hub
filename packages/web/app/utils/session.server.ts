@@ -1,6 +1,6 @@
 import { createCookieSessionStorage, redirect } from "@remix-run/node";
 import { db } from "./db.server";
-import { hashToHex, type Address, toChecksumAddress } from "./blockchain/types";
+import { type Address, toChecksumAddress } from "./blockchain/types";
 
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET must be set");
@@ -18,11 +18,18 @@ export const sessionStorage = createCookieSessionStorage({
   },
 });
 
-// Generate a challenge message for wallet verification
-export async function generateChallengeMessage(address: Address): Promise<string> {
-  const timestamp = Date.now();
-  const nonce = await hashToHex(`${address}:${timestamp}`);
-  return `Sign this message to verify your wallet ownership\n\nAddress: ${address}\nNonce: ${nonce}\nTimestamp: ${timestamp}`;
+export async function findOrCreateUser(address: Address) {
+  const checksumAddress = toChecksumAddress(address);
+  const user = await db.user.findUnique({
+    where: { address: checksumAddress },
+  });
+  
+  if (!user) {
+    // Return null if user doesn't exist - they'll need to register
+    return null;
+  }
+  
+  return user;
 }
 
 export async function createUserSession(
@@ -107,29 +114,4 @@ export async function logout(request: Request) {
       "Set-Cookie": await sessionStorage.destroySession(session),
     },
   });
-}
-
-// Rate limiting for login attempts
-const loginAttempts = new Map<string, { count: number; timestamp: number }>();
-
-export function checkLoginRateLimit(address: string): boolean {
-  const now = Date.now();
-  const attempt = loginAttempts.get(address);
-
-  // Clean up old attempts
-  if (attempt && now - attempt.timestamp > 15 * 60 * 1000) {
-    loginAttempts.delete(address);
-    return true;
-  }
-
-  if (attempt && attempt.count >= 5) {
-    return false;
-  }
-
-  loginAttempts.set(address, {
-    count: (attempt?.count || 0) + 1,
-    timestamp: now,
-  });
-
-  return true;
 }

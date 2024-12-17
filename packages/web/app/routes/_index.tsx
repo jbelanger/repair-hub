@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@remix-run/react";
+import { Link } from "@remix-run/react";
 import { Button } from "~/components/ui/Button";
 import { Building2, CheckCircle2, Shield, Wrench, Loader2 } from "lucide-react";
 import { useAccount } from 'wagmi';
@@ -64,16 +64,17 @@ const plans = [
 ];
 
 export default function Index() {
-  const navigate = useNavigate();
   const { address, isConnected } = useAccount();
   const [isRegistered, setIsRegistered] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(false);
 
   // Check if user is registered when connected
   useEffect(() => {
+    let mounted = true;
+
     async function checkUser() {
-      if (!isConnected || !address) {
-        setIsRegistered(null);
+      // Skip if not connected or already checking
+      if (!isConnected || !address || isChecking) {
         return;
       }
 
@@ -85,6 +86,8 @@ export default function Index() {
           body: JSON.stringify({ address })
         });
 
+        if (!mounted) return;
+
         if (response.ok) {
           const { exists } = await response.json();
           setIsRegistered(exists);
@@ -92,12 +95,18 @@ export default function Index() {
       } catch (error) {
         console.error('Error checking user:', error);
       } finally {
-        setIsChecking(false);
+        if (mounted) {
+          setIsChecking(false);
+        }
       }
     }
 
     checkUser();
-  }, [isConnected, address]);
+
+    return () => {
+      mounted = false;
+    };
+  }, [isConnected, address]); // Remove navigate from dependencies
 
   // Render appropriate action button based on user state
   const renderActionButton = () => {
@@ -108,7 +117,7 @@ export default function Index() {
             Connect your wallet to get started with secure property management
           </p>
           <WalletWrapper>
-            <ConnectWallet variant="primary" size="lg" />
+            <ConnectWallet variant="primary" size="lg" isLoading={isChecking} />
           </WalletWrapper>
         </>
       );
@@ -128,12 +137,11 @@ export default function Index() {
           <p className="text-lg text-white/90">
             Welcome back! Access your dashboard to manage your properties.
           </p>
-          <Button 
-            size="lg"
-            onClick={() => navigate('/dashboard')}
-          >
-            Go to Dashboard
-          </Button>
+          <Link to="/dashboard">
+            <Button size="lg">
+              Go to Dashboard
+            </Button>
+          </Link>
         </>
       );
     }
@@ -143,12 +151,11 @@ export default function Index() {
         <p className="text-lg text-white/90">
           Complete your registration to start managing properties.
         </p>
-        <Button 
-          size="lg"
-          onClick={() => navigate(`/register?address=${address}`)}
-        >
-          Complete Registration
-        </Button>
+        <Link to={`/register?address=${address}`}>
+          <Button size="lg">
+            Complete Registration
+          </Button>
+        </Link>
       </>
     );
   };
@@ -228,7 +235,7 @@ export default function Index() {
               <div className="mt-8 flex flex-col items-center gap-4">
                 <p className="text-lg text-white/90">Ready to get started?</p>
                 <WalletWrapper>
-                  <ConnectWallet variant="primary" size="lg" />
+                  <ConnectWallet variant="primary" size="lg" isLoading={isChecking} />
                 </WalletWrapper>
               </div>
             )}
@@ -269,13 +276,14 @@ export default function Index() {
                 </CardContent>
                 <CardFooter>
                   {isConnected && !isRegistered && !isChecking ? (
-                    <Button
-                      onClick={() => navigate(`${plan.href}&address=${address}`)}
-                      className="w-full rounded-full py-3"
-                      variant={planIdx === 1 ? "primary" : "secondary"}
-                    >
-                      {plan.cta}
-                    </Button>
+                    <Link to={`${plan.href}&address=${address}`}>
+                      <Button
+                        className="w-full rounded-full py-3"
+                        variant={planIdx === 1 ? "primary" : "secondary"}
+                      >
+                        {plan.cta}
+                      </Button>
+                    </Link>
                   ) : (
                     <div className="h-12 w-full" /> // Placeholder to maintain card height
                   )}

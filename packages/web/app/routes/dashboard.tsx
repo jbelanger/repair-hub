@@ -1,8 +1,5 @@
 import { json, redirect, type LoaderFunctionArgs } from "@remix-run/node";
 import { Outlet, useLoaderData } from "@remix-run/react";
-import { useAccount } from 'wagmi';
-import { useEffect } from 'react';
-import { useNavigate } from '@remix-run/react';
 import { ConnectWallet } from "~/components/ConnectWallet";
 import { requireUser } from "~/utils/session.server";
 import { Search } from "~/components/ui/Search";
@@ -11,89 +8,115 @@ import { Sidebar } from "~/components/ui/Sidebar";
 import { db } from "~/utils/db.server";
 import { Notifications } from "~/components/Notifications";
 import { RoleSwitcher } from "~/components/RoleSwitcher";
+import { useAccount } from "wagmi";
+import { Card } from "~/components/ui/Card";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const user = await requireUser(request);
-  
-  if (!user) {
-    return redirect("/");
-  }
-
-  // Get counts for the navigation badges
-  const [propertiesCount, pendingRepairsCount, activeTenantsCount, pendingInvitations, notifications] = await Promise.all([
-    db.property.count({ 
-      where: { landlordId: user.id } 
-    }),
-    db.repairRequest.count({
-      where: {
-        OR: [
-          { property: { landlordId: user.id } },
-          { initiatorId: user.id }
-        ],
-        status: "PENDING"
-      }
-    }),
-    db.propertyTenant.count({
-      where: {
-        property: { landlordId: user.id },
-        status: "ACTIVE"
-      }
-    }),
-    db.tenantInvitation.findMany({
-      where: {
-        email: user.email,
-        status: "PENDING",
-        expiresAt: {
-          gt: new Date()
+  try {
+    const user = await requireUser(request);
+    
+    // Get counts for the navigation badges
+    const [propertiesCount, pendingRepairsCount, activeTenantsCount, pendingInvitations, notifications] = await Promise.all([
+      db.property.count({ 
+        where: { landlordId: user.id } 
+      }),
+      db.repairRequest.count({
+        where: {
+          OR: [
+            { property: { landlordId: user.id } },
+            { initiatorId: user.id }
+          ],
+          status: "PENDING"
         }
-      },
-      include: {
-        property: {
-          select: {
-            address: true
+      }),
+      db.propertyTenant.count({
+        where: {
+          property: { landlordId: user.id },
+          status: "ACTIVE"
+        }
+      }),
+      db.tenantInvitation.findMany({
+        where: {
+          email: user.email,
+          status: "PENDING",
+          expiresAt: {
+            gt: new Date()
+          }
+        },
+        include: {
+          property: {
+            select: {
+              address: true
+            }
           }
         }
-      }
-    }),
-    db.notification.findMany({
-      where: {
-        userId: user.id,
-        read: false
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    })
-  ]);
+      }),
+      db.notification.findMany({
+        where: {
+          userId: user.id,
+          read: false
+        },
+        orderBy: {
+          createdAt: 'desc'
+        }
+      })
+    ]);
 
-  return json({ 
-    user,
-    counts: {
-      properties: propertiesCount,
-      repairs: pendingRepairsCount,
-      tenants: activeTenantsCount
-    },
-    notifications: {
-      invitations: pendingInvitations.map(invitation => ({
-        id: invitation.id,
-        propertyAddress: invitation.property.address,
-        startDate: invitation.startDate.toISOString(),
-        endDate: invitation.endDate.toISOString()
-      })),
-      general: notifications.map(notification => ({
-        id: notification.id,
-        type: notification.type,
-        title: notification.title,
-        message: notification.message,
-        createdAt: notification.createdAt.toISOString(),
-        read: notification.read
-      }))
-    }
-  });
+    return json({ 
+      user,
+      counts: {
+        properties: propertiesCount,
+        repairs: pendingRepairsCount,
+        tenants: activeTenantsCount
+      },
+      notifications: {
+        invitations: pendingInvitations.map(invitation => ({
+          id: invitation.id,
+          propertyAddress: invitation.property.address,
+          startDate: invitation.startDate.toISOString(),
+          endDate: invitation.endDate.toISOString()
+        })),
+        general: notifications.map(notification => ({
+          id: notification.id,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          createdAt: notification.createdAt.toISOString(),
+          read: notification.read
+        }))
+      }
+    });
+  } catch (error) {
+    // If requireUser throws, redirect to login
+    const url = new URL(request.url);
+    throw redirect(`/login?redirectTo=${encodeURIComponent(url.pathname)}`);
+  }
 }
 
 export default function AppLayout() {
   const { user, counts, notifications } = useLoaderData<typeof loader>();
+  const { isConnected } = useAccount();
+
+  // Show wallet connection UI if wallet is disconnected
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="w-full max-w-md p-6">
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-center text-white">
+              Wallet Disconnected
+            </h2>
+            <p className="text-center text-white/70">
+              Please reconnect your wallet to access your dashboard
+            </p>
+            <div className="flex justify-center">
+              <ConnectWallet />
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">

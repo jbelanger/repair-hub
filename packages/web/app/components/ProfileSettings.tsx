@@ -71,8 +71,18 @@ export function ProfileSettings({ user, isSubmitting, error }: ProfileSettingsPr
           </FormField>
 
           <FormField label="Account Type">
-            <div className="text-sm bg-white/5 rounded-lg p-3">
-              {user.role.charAt(0) + user.role.slice(1).toLowerCase()}
+            <div className="flex items-center gap-4">
+              <select
+                name="role"
+                defaultValue={user.role}
+                className="bg-white/5 text-white border border-white/10 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="TENANT">Tenant</option>
+                <option value="LANDLORD">Landlord</option>
+              </select>
+              <p className="text-sm text-white/50">
+                Switch between tenant and landlord roles
+              </p>
             </div>
           </FormField>
         </FormSection>

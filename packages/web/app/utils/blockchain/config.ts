@@ -2,8 +2,21 @@ import { getDefaultConfig } from '@rainbow-me/rainbowkit'
 import { sepolia } from 'wagmi/chains'
 import { http } from 'wagmi'
 
+// Ensure environment variables are available
+const WALLETCONNECT_PROJECT_ID = typeof document !== 'undefined' 
+  ? import.meta.env.VITE_WALLETCONNECT_PROJECT_ID 
+  : process.env.VITE_WALLETCONNECT_PROJECT_ID;
+
+const REPAIR_REQUEST_CONTRACT = typeof document !== 'undefined'
+  ? import.meta.env.VITE_REPAIR_REQUEST_CONTRACT
+  : process.env.VITE_REPAIR_REQUEST_CONTRACT;
+
+if (!WALLETCONNECT_PROJECT_ID) {
+  console.error('Missing VITE_WALLETCONNECT_PROJECT_ID environment variable');
+}
+
 export const CONTRACT_ADDRESSES = {
-  REPAIR_REQUEST: import.meta.env.VITE_REPAIR_REQUEST_CONTRACT,
+  REPAIR_REQUEST: REPAIR_REQUEST_CONTRACT,
 } as const
 
 export enum RepairRequestStatusType {
@@ -28,13 +41,16 @@ export interface RepairRequest {
   updatedAt: bigint
 }
 
-// Configure chains & providers with RainbowKit
+// Configure chains & providers with the correct transport
 export const config = getDefaultConfig({
   appName: 'Repair Hub',
-  projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID,
+  projectId: WALLETCONNECT_PROJECT_ID as string,
   chains: [sepolia],
   transports: {
-    [sepolia.id]: http()
+    [sepolia.id]: http(
+      // You can add an Infura/Alchemy URL here if needed
+      // `https://sepolia.infura.io/v3/${INFURA_ID}`
+    )
   },
-  ssr: true,
+  ssr: true, // Enable SSR mode
 })

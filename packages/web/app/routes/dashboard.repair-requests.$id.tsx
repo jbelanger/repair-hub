@@ -61,7 +61,6 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw new Response("Not Found", { status: 404 });
   }
 
-  // Check if user is landlord or tenant based on wallet address
   const isLandlord = user.address.toLowerCase() === repairRequest.property.landlord.address.toLowerCase();
   const isTenant = user.address.toLowerCase() === repairRequest.initiator.address.toLowerCase();
 
@@ -201,7 +200,6 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
     return json({ error: "Invalid action" }, { status: 400 });
   } catch (error: any) {
-    console.error("Action error:", error);
     return json({ 
       error: error.message || "An unexpected error occurred" 
     }, { status: 500 });
@@ -223,146 +221,16 @@ export default function RepairRequestPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showLandlordView, setShowLandlordView] = useState(user.role === "LANDLORD");
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
-  const isSubmitting = navigation.state === "submitting";
+  const [blockchainState, setBlockchainState] = useState({
+    request: null as ContractRepairRequest | null,
+    logs: [] as Log[],
+    isLoading: false,
+    isError: false
+  });
   const mounted = useRef(true);
   const timeoutRef = useRef<NodeJS.Timeout>();
-
-  // Update showLandlordView when role changes
-  useEffect(() => {
-    setShowLandlordView(user.role === "LANDLORD");
-  }, [user.role]);
-
-  // Get blockchain data
-  const publicClient = usePublicClient()
-  const [blockchainRequest, setBlockchainRequest] = useState<ContractRepairRequest | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isError, setIsError] = useState(false)
-  const [logs, setLogs] = useState<Log[]>([])
-
-  // Watch contract events
-  useEffect(() => {
-    if (!publicClient || !mounted.current) return
-
-    const result = watchRepairRequestEvents(publicClient, (newLogs) => {
-      if (mounted.current) {
-        setLogs(prev => {
-          const uniqueLogs = newLogs.filter(newLog => 
-            !prev.some(existingLog => 
-              existingLog.transactionHash === newLog.transactionHash && 
-              existingLog.logIndex === newLog.logIndex
-            )
-          )
-          return [...prev, ...uniqueLogs]
-        })
-      }
-    })
-
-    result.match(
-      ({ unwatch }) => {
-        return () => {
-          mounted.current = false
-          unwatch()
-        }
-      },
-      () => {
-        return () => {
-          mounted.current = false
-        }
-      }
-    )
-  }, [publicClient])
-
-  // Get blockchain data
-  useEffect(() => {
-    mounted.current = true
-    const fetchData = async () => {
-      if (!publicClient || !mounted.current) return
-      setIsLoading(true)
-
-      const result = await readRepairRequest(publicClient, BigInt(repairRequest.id))
-      if (!mounted.current) return
-
-      result.match(
-        (data) => {
-          setBlockchainRequest(data)
-          setIsError(false)
-          if (mounted.current) {
-            timeoutRef.current = setTimeout(fetchData, 5000)
-          }
-        },
-        () => {
-          setIsError(true)
-          if (mounted.current) {
-            timeoutRef.current = setTimeout(fetchData, 15000)
-          }
-        }
-      )
-      setIsLoading(false)
-    }
-
-    fetchData()
-
-    return () => {
-      mounted.current = false
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-      setIsProcessing(false)
-      setWithdrawSuccess(false)
-    }
-  }, [publicClient, repairRequest.id])
-
-  const transformedBlockchainRequest: BlockchainRepairRequest | null = blockchainRequest ? {
-    descriptionHash: blockchainRequest.descriptionHash,
-    workDetailsHash: blockchainRequest.workDetailsHash,
-    initiator: blockchainRequest.initiator,
-    createdAt: blockchainRequest.createdAt,
-    updatedAt: blockchainRequest.updatedAt,
-  } : null;
-
-  const events = logs.map(log => {
-    try {
-      const decoded = decodeEventLog({
-        abi: RepairRequestContractABI,
-        data: log.data,
-        topics: log.topics
-      })
-
-      const type = decoded.eventName === 'RepairRequestCreated' ? 'created'
-        : decoded.eventName === 'RepairRequestStatusChanged' ? 'updated'
-        : decoded.eventName === 'DescriptionUpdated' ? 'hashUpdated'
-        : decoded.eventName === 'WorkDetailsUpdated' ? 'workDetailsUpdated'
-        : 'created'
-
-      return {
-        ...log,
-        type,
-        timestamp: BigInt(Math.floor(Date.now() / 1000)),
-        data: decoded.args
-      } as BlockchainEvent
-    } catch {
-      return {
-        ...log,
-        type: 'created',
-        timestamp: BigInt(Math.floor(Date.now() / 1000)),
-        data: {}
-      } as BlockchainEvent
-    }
-  })
-
   const formDataRef = useRef<FormData | null>(null);
-
-  useEffect(() => {
-    if (navigation.formData) {
-      formDataRef.current = navigation.formData;
-    }
-  }, [navigation.formData]);
-
-  useEffect(() => {
-    if (withdrawSuccess && mounted.current) {
-      navigate("/dashboard/repair-requests", { replace: true });
-    }
-  }, [withdrawSuccess, navigate]);
+  const publicClient = usePublicClient();
 
   const handleBlockchainTransaction = useCallback(async (
     action: string,
@@ -461,12 +329,6 @@ export default function RepairRequestPage() {
       }
     } catch (error: any) {
       if (!mounted.current) return;
-      console.error('Transaction error:', {
-        error,
-        message: error.message,
-        cause: error.cause,
-        stack: error.stack
-      });
       addToast(error.message || "Failed to complete the transaction", "error", "Transaction Failed");
     } finally {
       if (mounted.current) {
@@ -475,6 +337,94 @@ export default function RepairRequestPage() {
     }
   }, [addToast, withdrawRequest, updateWorkDetails, updateStatus, approveWork, isProcessing, repairRequest.id, user.address]);
 
+  // Single useEffect to handle all blockchain data and cleanup
+  useEffect(() => {
+    mounted.current = true;
+
+    async function fetchData() {
+      if (!publicClient || !mounted.current) return;
+      setBlockchainState(prev => ({ ...prev, isLoading: true }));
+
+      const result = await readRepairRequest(publicClient, BigInt(repairRequest.id));
+      
+      if (!mounted.current) return;
+
+      result.match(
+        (data) => {
+          setBlockchainState(prev => ({
+            ...prev,
+            request: data,
+            isError: false,
+            isLoading: false
+          }));
+          if (mounted.current) {
+            timeoutRef.current = setTimeout(fetchData, 5000);
+          }
+        },
+        () => {
+          setBlockchainState(prev => ({
+            ...prev,
+            isError: true,
+            isLoading: false
+          }));
+          if (mounted.current) {
+            timeoutRef.current = setTimeout(fetchData, 15000);
+          }
+        }
+      );
+    }
+
+    // Start data fetching
+    fetchData();
+
+    // Setup event watching
+    const watchResult = watchRepairRequestEvents(publicClient, (newLogs) => {
+      if (mounted.current) {
+        setBlockchainState(prev => ({
+          ...prev,
+          logs: [
+            ...prev.logs,
+            ...newLogs.filter(newLog => 
+              !prev.logs.some(existingLog => 
+                existingLog.transactionHash === newLog.transactionHash && 
+                existingLog.logIndex === newLog.logIndex
+              )
+            )
+          ]
+        }));
+      }
+    });
+
+    // Cleanup function
+    return () => {
+      mounted.current = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      watchResult.match(
+        ({ unwatch }) => unwatch(),
+        () => {}
+      );
+      setIsProcessing(false);
+      setWithdrawSuccess(false);
+    };
+  }, [publicClient, repairRequest.id]);
+
+  // Handle navigation form data
+  useEffect(() => {
+    if (navigation.formData) {
+      formDataRef.current = navigation.formData;
+    }
+  }, [navigation.formData]);
+
+  // Handle withdraw success navigation
+  useEffect(() => {
+    if (withdrawSuccess) {
+      navigate("/dashboard/repair-requests", { replace: true });
+    }
+  }, [withdrawSuccess, navigate]);
+
+  // Handle action data and blockchain transactions
   useEffect(() => {
     if (!actionData || !mounted.current) return;
 
@@ -495,6 +445,44 @@ export default function RepairRequestPage() {
       );
     }
   }, [actionData, isProcessing, handleBlockchainTransaction, addToast]);
+
+  const transformedBlockchainRequest: BlockchainRepairRequest | null = blockchainState.request ? {
+    descriptionHash: blockchainState.request.descriptionHash,
+    workDetailsHash: blockchainState.request.workDetailsHash,
+    initiator: blockchainState.request.initiator,
+    createdAt: blockchainState.request.createdAt,
+    updatedAt: blockchainState.request.updatedAt,
+  } : null;
+
+  const events = blockchainState.logs.map(log => {
+    try {
+      const decoded = decodeEventLog({
+        abi: RepairRequestContractABI,
+        data: log.data,
+        topics: log.topics
+      })
+
+      const type = decoded.eventName === 'RepairRequestCreated' ? 'created'
+        : decoded.eventName === 'RepairRequestStatusChanged' ? 'updated'
+        : decoded.eventName === 'DescriptionUpdated' ? 'hashUpdated'
+        : decoded.eventName === 'WorkDetailsUpdated' ? 'workDetailsUpdated'
+        : 'created'
+
+      return {
+        ...log,
+        type,
+        timestamp: BigInt(Math.floor(Date.now() / 1000)),
+        data: decoded.args
+      } as BlockchainEvent
+    } catch {
+      return {
+        ...log,
+        type: 'created',
+        timestamp: BigInt(Math.floor(Date.now() / 1000)),
+        data: {}
+      } as BlockchainEvent
+    }
+  });
 
   return (
     <div className="p-6 space-y-6">
@@ -532,8 +520,8 @@ export default function RepairRequestPage() {
           )}
 
           <RepairRequestBlockchain
-            isLoading={isLoading}
-            isError={isError}
+            isLoading={blockchainState.isLoading}
+            isError={blockchainState.isError}
             blockchainRequest={transformedBlockchainRequest}
             events={events}
           />

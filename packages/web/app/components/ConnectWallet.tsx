@@ -1,73 +1,20 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { Link } from '@remix-run/react';
 import { Wallet2, ChevronDown, ExternalLink, Loader2 } from 'lucide-react'
-import { useAccountEffect, useSignMessage, useAccount } from 'wagmi'
-import { useState } from 'react';
 import { cn } from '~/utils/cn';
 
 interface ConnectWalletProps {  
   variant?: "primary" | "secondary" | "dark" | "blue" | "ghost" | "danger";
   size?: "sm" | "md" | "lg" | "icon";
   className?: string;
-}
-
-interface CheckUserResponse {
-  exists?: boolean;
-  error?: string;
+  isLoading?: boolean;
 }
 
 export function ConnectWallet({ 
   variant = "primary",
   size = "md",
-  className
+  className,
+  isLoading = false
 }: ConnectWalletProps) {
-  const { signMessageAsync } = useSignMessage();
-  const { address } = useAccount();
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [destination, setDestination] = useState<string | null>(null);
-  
-  useAccountEffect({
-    async onConnect({ address: connectedAddress, isReconnected }) {
-      if (!connectedAddress || isReconnected || isConnecting || isAuthenticating) return;
-      
-      try {
-        setIsConnecting(true);
-        setError(null);
-
-        // Check if user exists
-        const response = await fetch('/api/auth/check-user', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ address: connectedAddress }),
-        });
-
-        const data: CheckUserResponse = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        // Set destination for navigation
-        setDestination(data.exists ? '/dashboard' : `/register?address=${connectedAddress}`);
-
-      } catch (error) {
-        console.error('Connection error:', error);
-        setError(error instanceof Error ? error.message : 'Failed to connect');
-      } finally {
-        setIsConnecting(false);
-      }
-    },
-    onDisconnect() {
-      // Call logout endpoint
-      fetch('/api/auth/logout', { method: 'POST' });
-      setDestination('/');
-    },
-  });
-
   // Match Button component styles
   const baseStyles = "inline-flex items-center justify-center font-medium transition-all focus:outline-none disabled:opacity-50 disabled:pointer-events-none";
   
@@ -127,12 +74,12 @@ export function ConnectWallet({
                   sizes[size],
                   className
                 )}
-                disabled={isConnecting || isAuthenticating}
+                disabled={isLoading}
               >
-                {isConnecting || isAuthenticating ? (
+                {isLoading ? (
                   <div className="flex items-center gap-2">
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    <span>{isAuthenticating ? 'Authenticating...' : 'Connecting...'}</span>
+                    <span>Loading...</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
@@ -212,24 +159,6 @@ export function ConnectWallet({
           );
         }}
       </ConnectButton.Custom>
-      {error && (
-        <p className="text-sm text-red-500 text-center">{error}</p>
-      )}
-      {destination && (
-        <Link to={destination} className="hidden" id="navigation-link" />
-      )}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `
-            function clickLink() {
-              document.getElementById('navigation-link')?.click();
-            }
-            if (document.getElementById('navigation-link')) {
-              clickLink();
-            }
-          `,
-        }}
-      />
     </div>
   );
 }

@@ -2,12 +2,22 @@ import { usePublicClient } from 'wagmi'
 import { useState, useEffect, useRef } from 'react'
 import { readRepairRequest } from '~/utils/blockchain/utils/contract-read'
 import type { ContractRepairRequest } from '~/utils/blockchain/types/repair-request'
+import type { ContractError } from '~/utils/blockchain/types/repair-request'
+
+type RequestState = {
+  data: ContractRepairRequest | null;
+  error: ContractError | null;
+  isError: boolean;
+}
 
 export function useRepairRequestData(requestId: string) {
   const publicClient = usePublicClient()
-  const [data, setData] = useState<ContractRepairRequest | null>(null)
+  const [state, setState] = useState<RequestState>({
+    data: null,
+    error: null,
+    isError: false
+  })
   const [isLoading, setIsLoading] = useState(false)
-  const [isError, setIsError] = useState(false)
   const mounted = useRef(true)
 
   useEffect(() => {
@@ -19,23 +29,30 @@ export function useRepairRequestData(requestId: string) {
       setIsLoading(true)
 
       const result = await readRepairRequest(publicClient, BigInt(requestId))
-      
       if (!mounted.current) return
 
-      result.match(
-        (data) => {
-          setData(data)
-          setIsError(false)
-          // Schedule next fetch if successful
-          timeoutId = setTimeout(fetchData, 5000)
-        },
-        () => {
-          setIsError(true)
-          // Retry after longer delay on error
-          timeoutId = setTimeout(fetchData, 15000)
-        }
+      // Wait for the ResultAsync to resolve
+      const resolvedResult = await result.match(
+        (data) => ({
+          data,
+          error: null,
+          isError: false
+        }),
+        (error) => ({
+          data: null,
+          error,
+          isError: true
+        })
       )
+
+      setState(resolvedResult)
       setIsLoading(false)
+
+      // Schedule next fetch based on result
+      timeoutId = setTimeout(
+        fetchData,
+        resolvedResult.isError ? 15000 : 5000
+      )
     }
 
     fetchData()
@@ -47,8 +64,7 @@ export function useRepairRequestData(requestId: string) {
   }, [publicClient, requestId])
 
   return {
-    data,
-    isLoading,
-    isError
+    ...state,
+    isLoading
   }
 }

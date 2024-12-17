@@ -6,14 +6,16 @@ import {
   ScrollRestoration,
 } from "@remix-run/react";
 import type { LinksFunction } from "@remix-run/node";
-import { WagmiProvider } from 'wagmi';
+import { WagmiConfig } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit';
 import { config } from "~/utils/blockchain/config";
 import { ThemeProvider } from "~/context/ThemeContext";
+import { useEffect, useState } from "react";
 
 import "./tailwind.css";
 import "./styles/themes.css";
+import "@rainbow-me/rainbowkit/styles.css";
 
 const queryClient = new QueryClient();
 
@@ -77,16 +79,32 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function ClientOnly({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
 export default function App() {
   return (
-    <WagmiProvider config={config}>
+    <ClientOnly>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={darkTheme()}>
-          <ThemeProvider>
-            <Outlet />
-          </ThemeProvider>
-        </RainbowKitProvider>
+        <WagmiConfig config={config}>
+          <RainbowKitProvider theme={darkTheme()}>
+            <ThemeProvider>
+              <Outlet />
+            </ThemeProvider>
+          </RainbowKitProvider>
+        </WagmiConfig>
       </QueryClientProvider>
-    </WagmiProvider>
+    </ClientOnly>
   );
 }
