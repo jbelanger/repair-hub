@@ -10,8 +10,8 @@ type Props = {
   description: string;
   urgency: string;
   status: string;
-  availableStatusUpdates: RepairRequestStatusType[];
-  isTenant: boolean;
+  availableStatusUpdates?: RepairRequestStatusType[];
+  isTenant: boolean;  // This should be true only if the user is the actual initiator
   isPending: boolean;
   children?: ReactNode;
 };
@@ -22,14 +22,18 @@ export function RepairRequestDescription({
   status,
   isTenant,
   isPending,
-  availableStatusUpdates,
+  availableStatusUpdates = [],
   children,
 }: Props) {
-  const showLandlordActions = !isTenant && availableStatusUpdates.length > 0;
-  const showTenantActions = isTenant && availableStatusUpdates.length > 0;
-  const canWithdraw = availableStatusUpdates.includes(RepairRequestStatusType.CANCELLED);
-  const canApproveWork = availableStatusUpdates.includes(RepairRequestStatusType.ACCEPTED) || 
-                        availableStatusUpdates.includes(RepairRequestStatusType.REFUSED);
+  const showLandlordActions = !isTenant && children;
+  const showTenantActions = isTenant;
+  // A tenant can withdraw if they are the initiator and the status is pending
+  const canWithdraw = isTenant && status === "PENDING";
+  const canApproveWork = status === "COMPLETED";
+
+  // Only show the actions section if there are actually actions to show
+  const showActionsSection = (showLandlordActions) || 
+                           (showTenantActions && (canWithdraw || canApproveWork));
 
   return (
     <Card
@@ -76,7 +80,7 @@ export function RepairRequestDescription({
         </div>
       </div>
 
-      {(showLandlordActions || showTenantActions) && (
+      {showActionsSection && (
         <div className="px-6 py-4 border-t border-purple-600/10">
           {showLandlordActions && (
             <div className="flex flex-wrap gap-2">
@@ -86,7 +90,7 @@ export function RepairRequestDescription({
 
           {showTenantActions && (
             <div className="space-y-2">
-              {canWithdraw ? (
+              {canWithdraw && (
                 <Form method="post">
                   <input type="hidden" name="_action" value="withdrawRequest" />
                   <Button
@@ -97,7 +101,8 @@ export function RepairRequestDescription({
                     Withdraw Request
                   </Button>
                 </Form>
-              ) : canApproveWork && (
+              )}
+              {canApproveWork && (
                 <div className="space-y-2">
                   <p className="text-white/70">Approve Work</p>
                   <div className="flex gap-2">

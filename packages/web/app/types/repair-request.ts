@@ -32,7 +32,8 @@ export type LoaderData = {
     role: string;
     address: Address;
   };
-  availableStatusUpdates: RepairRequestStatusType[];
+  isLandlord: boolean;
+  isTenant: boolean;
 };
 
 export type BlockchainRepairRequest = {

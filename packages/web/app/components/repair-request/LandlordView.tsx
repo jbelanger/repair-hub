@@ -7,7 +7,7 @@ import type { LoaderData } from "~/types/repair-request";
 
 type LandlordViewProps = {
   repairRequest: LoaderData['repairRequest'];
-  availableStatusUpdates: RepairRequestStatusType[];
+  availableStatusUpdates?: RepairRequestStatusType[];
   isPending: boolean;
   addToast: (message: string, type?: "success" | "error", title?: string) => void;
   children?: ReactNode;
@@ -15,7 +15,7 @@ type LandlordViewProps = {
 
 export function LandlordView({
   repairRequest,
-  availableStatusUpdates,
+  availableStatusUpdates = [],
   isPending,
   addToast,
   children,

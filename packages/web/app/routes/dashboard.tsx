@@ -4,13 +4,13 @@ import { useAccount } from 'wagmi';
 import { useEffect } from 'react';
 import { useNavigate } from '@remix-run/react';
 import { ConnectWallet } from "~/components/ConnectWallet";
-import { RoleSwitcher } from "~/components/RoleSwitcher";
 import { requireUser } from "~/utils/session.server";
 import { Search } from "~/components/ui/Search";
 import { Settings } from "lucide-react";
 import { Sidebar } from "~/components/ui/Sidebar";
 import { db } from "~/utils/db.server";
 import { Notifications } from "~/components/Notifications";
+import { RoleSwitcher } from "~/components/RoleSwitcher";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const user = await requireUser(request);
@@ -21,48 +21,40 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // Get counts for the navigation badges
   const [propertiesCount, pendingRepairsCount, activeTenantsCount, pendingInvitations, notifications] = await Promise.all([
-    user.role === "LANDLORD" 
-      ? db.property.count({ where: { landlordId: user.id } })
-      : 0,
-    user.role === "LANDLORD"
-      ? db.repairRequest.count({
-          where: {
-            property: { landlordId: user.id },
-            status: "PENDING"
+    db.property.count({ 
+      where: { landlordId: user.id } 
+    }),
+    db.repairRequest.count({
+      where: {
+        OR: [
+          { property: { landlordId: user.id } },
+          { initiatorId: user.id }
+        ],
+        status: "PENDING"
+      }
+    }),
+    db.propertyTenant.count({
+      where: {
+        property: { landlordId: user.id },
+        status: "ACTIVE"
+      }
+    }),
+    db.tenantInvitation.findMany({
+      where: {
+        email: user.email,
+        status: "PENDING",
+        expiresAt: {
+          gt: new Date()
+        }
+      },
+      include: {
+        property: {
+          select: {
+            address: true
           }
-        })
-      : db.repairRequest.count({
-          where: {
-            initiatorId: user.id,
-            status: "PENDING"
-          }
-        }),
-    user.role === "LANDLORD"
-      ? db.propertyTenant.count({
-          where: {
-            property: { landlordId: user.id },
-            status: "ACTIVE"
-          }
-        })
-      : 0,
-    user.role === "TENANT"
-      ? db.tenantInvitation.findMany({
-          where: {
-            email: user.email,
-            status: "PENDING",
-            expiresAt: {
-              gt: new Date()
-            }
-          },
-          include: {
-            property: {
-              select: {
-                address: true
-              }
-            }
-          }
-        })
-      : [],
+        }
+      }
+    }),
     db.notification.findMany({
       where: {
         userId: user.id,
@@ -75,7 +67,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
   ]);
 
   return json({ 
-    currentRole: user.role,
     user,
     counts: {
       properties: propertiesCount,
@@ -102,7 +93,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function AppLayout() {
-  const { currentRole, user, counts, notifications } = useLoaderData<typeof loader>();
+  const { user, counts, notifications } = useLoaderData<typeof loader>();
 
   return (
     <div className="min-h-screen">
@@ -149,11 +140,11 @@ export default function AppLayout() {
 
           {/* Right: Actions */}
           <div className="flex items-center gap-4">
-            <RoleSwitcher currentRole={currentRole} />
             <Notifications 
               invitations={notifications.invitations} 
               notifications={notifications.general}
             />
+            <RoleSwitcher currentRole={user.role} />
             <button
               className="p-2 rounded-lg transition-colors duration-200 hover:bg-[var(--color-bg-tertiary)]"
               style={{ color: 'var(--color-text-secondary)' }}

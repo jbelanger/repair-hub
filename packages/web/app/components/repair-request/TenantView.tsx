@@ -5,14 +5,16 @@ import type { LoaderData } from "~/types/repair-request";
 
 type TenantViewProps = {
   repairRequest: LoaderData['repairRequest'];
-  availableStatusUpdates: RepairRequestStatusType[];
+  availableStatusUpdates?: RepairRequestStatusType[];
   isPending: boolean;
+  isTenant: boolean;
 };
 
 export function TenantView({
   repairRequest,
-  availableStatusUpdates,
+  availableStatusUpdates = [],
   isPending,
+  isTenant,
 }: TenantViewProps) {
   return (
     <>
@@ -21,7 +23,7 @@ export function TenantView({
         urgency={repairRequest.urgency}
         status={repairRequest.status}
         availableStatusUpdates={availableStatusUpdates}
-        isTenant={true}
+        isTenant={isTenant}
         isPending={isPending}
       />
 

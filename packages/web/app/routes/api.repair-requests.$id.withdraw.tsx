@@ -41,16 +41,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   try {
-    // Update the repair request status to CANCELLED
-    const updatedRequest = await db.repairRequest.update({
-      where: { id },
-      data: {
-        status: "CANCELLED",
-        updatedAt: new Date(),
-      },
-    });
-
-    return json({ success: true, repairRequest: updatedRequest });
+    // Return success without updating the database
+    // The database will be updated after blockchain confirmation
+    return json({ success: true });
   } catch (error) {
     console.error('Error withdrawing repair request:', error);
     return json(

@@ -36,42 +36,6 @@ export function getValidTransitions(status: RepairRequestStatusType): RepairRequ
   }
 }
 
-// Get available status updates based on user role and current status
-export function getAvailableStatusUpdates(
-  currentStatus: string,
-  userRole: string,
-  isLandlord: boolean,
-  isTenant: boolean
-): RepairRequestStatusType[] {
-  if (!isLandlord && !isTenant) return [];
-
-  // Convert database status string to enum
-  const currentEnum = reverseStatusMap[currentStatus as keyof typeof reverseStatusMap];
-  if (currentEnum === undefined) return [];
-
-  // Get valid transitions for the current status
-  const validTransitions = getValidTransitions(currentEnum);
-  
-  // Filter transitions based on user role
-  if (isLandlord) {
-    return validTransitions.filter(status => 
-      status === RepairRequestStatusType.IN_PROGRESS ||
-      status === RepairRequestStatusType.COMPLETED ||
-      status === RepairRequestStatusType.REJECTED
-    );
-  }
-  
-  if (isTenant) {
-    return validTransitions.filter(status => 
-      status === RepairRequestStatusType.CANCELLED ||
-      status === RepairRequestStatusType.ACCEPTED ||
-      status === RepairRequestStatusType.REFUSED
-    );
-  }
-
-  return [];
-}
-
 // Validate status transitions according to smart contract rules
 export function validateStatusTransition(currentStatus: string, newStatus: string): string | null {
   // Convert database status strings to blockchain enum values
