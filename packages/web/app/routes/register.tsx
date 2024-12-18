@@ -8,7 +8,7 @@ import { Building2, User } from "lucide-react";
 import { Card } from "~/components/ui/Card";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { useAccount } from 'wagmi';
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 
 type ActionData = {
@@ -142,9 +142,10 @@ export async function action({ request }: ActionFunctionArgs) {
 export default function Register() {
   const { address, plans, existingUser, error } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
-  const selectedPlan = searchParams.get("plan");
   const navigate = useNavigate();
   const { isConnected } = useAccount();
+  const [selectedRole, setSelectedRole] = useState<string>("");
+  const [selectedPlanId, setSelectedPlanId] = useState<string>("");
 
   // Redirect to home if wallet disconnects
   useEffect(() => {
@@ -193,6 +194,17 @@ export default function Register() {
     );
   }
 
+  const handleRoleSelect = (role: string) => {
+    setSelectedRole(role);
+    if (role === "TENANT") {
+      setSelectedPlanId(""); // Reset plan when switching to tenant
+    }
+  };
+
+  const handlePlanSelect = (planId: string) => {
+    setSelectedPlanId(planId);
+  };
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <PageHeader
@@ -204,86 +216,91 @@ export default function Register() {
       <Form method="post" className="space-y-8">
         <input type="hidden" name="address" value={address} />
 
-{/* Role Selection */}
-<div className="space-y-4">
+        {/* Role Selection */}
+        <div className="space-y-4">
           <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
             Select your role
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card
-              as="label"
-              className="relative flex flex-col items-center p-6 cursor-pointer transition-colors hover:bg-purple-500/5 border-2 border-transparent data-[checked]:border-purple-500"
-              data-checked={selectedPlan === null}
-            >
-              <input
-                type="radio"
-                name="role"
-                value="TENANT"
-                className="sr-only"
-                defaultChecked={selectedPlan === null}
-              />
-              <User className="h-8 w-8 text-purple-500 mb-4" />
-              <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>Tenant</h3>
-              <p className="text-sm text-center mt-2" style={{ color: 'var(--color-text-secondary)' }}>
-                Find and rent properties, submit repair requests
-              </p>
-            </Card>
+            <div onClick={() => handleRoleSelect("TENANT")}>
+              <Card
+                className="relative flex flex-col items-center p-6 cursor-pointer transition-colors hover:bg-purple-500/5 border-2 border-transparent data-[checked]:border-purple-500"
+                data-checked={selectedRole === "TENANT"}
+              >
+                <input
+                  type="radio"
+                  name="role"
+                  value="TENANT"
+                  className="sr-only"
+                  checked={selectedRole === "TENANT"}
+                  onChange={() => {}} // Empty onChange to avoid React warning
+                />
+                <User className="h-8 w-8 text-purple-500 mb-4" />
+                <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>Tenant</h3>
+                <p className="text-sm text-center mt-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  Find and rent properties, submit repair requests
+                </p>
+              </Card>
+            </div>
 
-            <Card
-              as="label"
-              className="relative flex flex-col items-center p-6 cursor-pointer transition-colors hover:bg-purple-500/5 border-2 border-transparent data-[checked]:border-purple-500"
-              data-checked={selectedPlan !== null}
-            >
-              <input
-                type="radio"
-                name="role"
-                value="LANDLORD"
-                className="sr-only"
-                defaultChecked={selectedPlan !== null}
-              />
-              <Building2 className="h-8 w-8 text-purple-500 mb-4" />
-              <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>Landlord</h3>
-              <p className="text-sm text-center mt-2" style={{ color: 'var(--color-text-secondary)' }}>
-                Manage properties and tenants
-              </p>
-            </Card>
+            <div onClick={() => handleRoleSelect("LANDLORD")}>
+              <Card
+                className="relative flex flex-col items-center p-6 cursor-pointer transition-colors hover:bg-purple-500/5 border-2 border-transparent data-[checked]:border-purple-500"
+                data-checked={selectedRole === "LANDLORD"}
+              >
+                <input
+                  type="radio"
+                  name="role"
+                  value="LANDLORD"
+                  className="sr-only"
+                  checked={selectedRole === "LANDLORD"}
+                  onChange={() => {}} // Empty onChange to avoid React warning
+                />
+                <Building2 className="h-8 w-8 text-purple-500 mb-4" />
+                <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>Landlord</h3>
+                <p className="text-sm text-center mt-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  Manage properties and tenants
+                </p>
+              </Card>
+            </div>
           </div>
         </div>
 
         {/* Plan Selection (only for landlords) */}
-        {plans.length > 0 && (
+        {selectedRole === "LANDLORD" && plans.length > 0 && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
               Select a Plan
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {plans.map((plan) => (
-                <Card
-                  key={plan.id}
-                  as="label"
-                  className="relative flex flex-col p-6 cursor-pointer transition-colors hover:bg-purple-500/5 border-2 border-transparent data-[checked]:border-purple-500"
-                  data-checked={selectedPlan === plan.name.toLowerCase()}
-                >
-                  <input
-                    type="radio"
-                    name="plan"
-                    value={plan.id}
-                    className="sr-only"
-                    defaultChecked={selectedPlan === plan.name.toLowerCase()}
-                  />
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>{plan.name}</h4>
-                      <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
-                        Up to {plan.maxProperties} {plan.maxProperties === 1 ? 'property' : 'properties'}
-                      </p>
+                <div key={plan.id} onClick={() => handlePlanSelect(plan.id)}>
+                  <Card
+                    className="relative flex flex-col p-6 cursor-pointer transition-colors hover:bg-purple-500/5 border-2 border-transparent data-[checked]:border-purple-500"
+                    data-checked={selectedPlanId === plan.id}
+                  >
+                    <input
+                      type="radio"
+                      name="plan"
+                      value={plan.id}
+                      className="sr-only"
+                      checked={selectedPlanId === plan.id}
+                      onChange={() => {}} // Empty onChange to avoid React warning
+                    />
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>{plan.name}</h4>
+                        <p className="text-sm mt-1" style={{ color: 'var(--color-text-secondary)' }}>
+                          Up to {plan.maxProperties} {plan.maxProperties === 1 ? 'property' : 'properties'}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-purple-500">${plan.price}</div>
+                        <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>/month</div>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <div className="text-2xl font-bold text-purple-500">${plan.price}</div>
-                      <div className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>/month</div>
-                    </div>
-                  </div>
-                </Card>
+                  </Card>
+                </div>
               ))}
             </div>
           </div>
@@ -365,4 +382,3 @@ export default function Register() {
     </div>
   );
 }
-

@@ -60,7 +60,17 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   // Get metadata from database
   const repairRequest = await db.repairRequest.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true,
+      description: true,
+      descriptionHash: true,
+      workDetails: true,
+      workDetailsHash: true,
+      urgency: true,
+      status: true,
+      attachments: true,
+      createdAt: true,
+      updatedAt: true,
       property: {
         include: {
           landlord: {
@@ -330,7 +340,8 @@ export default function RepairRequestPage() {
   const { updateStatus, updateWorkDetails, withdrawRequest, approveWork, isPending } = useRepairRequest();
   const { toasts, addToast, removeToast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showLandlordView, setShowLandlordView] = useState(user.role === "LANDLORD");
+  // Changed this line to use isLandlord instead of user.role
+  const [showLandlordView, setShowLandlordView] = useState(isLandlord);
   const [withdrawSuccess, setWithdrawSuccess] = useState(false);
   const [pendingAction, setPendingAction] = useState<{
     type: 'withdraw' | 'status' | 'workDetails';
@@ -708,5 +719,3 @@ return (
   </div>
 );
 }
-
-
